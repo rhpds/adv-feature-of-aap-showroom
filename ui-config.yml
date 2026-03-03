@@ -11,7 +11,7 @@ view_switcher:
   default_mode: split
 
 tabs:
-  - name: '>_Terminal
+  - name: '>_Terminal'
     path: /wetty
     port: 443
   - name: '@Codeserver'
