@@ -15,26 +15,8 @@ tabs:
     path: /wetty
     port: 443
   - name: '@Codeserver'
-    url: '${vscode_server_url}'
+    url: '{vscode_server_url}'
   - name: AAP
-    url: '${controller_url}'
+    url: '{controller_url}'
   - name: Gitea
-    url: '${gitea_url}'
-  # OCP Console
-  # - name: OCP Console
-  #   url: 'https://console-openshift-console.${DOMAIN}'
-
-  #Single terminal
-
-
-  # Vertical split terminals
-  # - name: Bastion
-  #   path: /wetty
-  #   port: 443
-  #   secondary_name: Bastion
-  #   secondary_path: /wetty
-  #   secondary_port: 443
-
-  # External page
-  # - name: Llamastack Docs
-  #   url: 'https://llama-stack.readthedocs.io/en/latest/'
+    url: '{gitea_url}'
