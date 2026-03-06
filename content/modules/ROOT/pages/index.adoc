@@ -1,94 +1,172 @@
-= What is Showroom?
-:navtitle: What is Showroom?
+= Lab Introduction
 
-Showroom is a web-based lab instruction platform for the https://demo.redhat.com[Red Hat Demo Platform].
-It combines rendered AsciiDoc content with embedded terminals, consoles, and interactive tools -- giving workshop and demo participants everything they need in a single browser tab.
+== About this Lab
 
-== What Users See
+Already know the basics of Red Hat Ansible Automation Platform and want more?
 
-When a participant opens their Showroom URL they get a split-pane interface:
+NOTE: Since Ansible Automation Platform 2.5, Automation Controller is now accessible through the automation execution interface in the new UI, providing the same capabilities.
+If you're familiar with previous versions of AAP, note that from now on, we will refer to _automation controller_ as _Automation Execution_ to align with the latest terminology.
 
-* **Left pane** -- step-by-step lab instructions rendered from an https://antora.org[Antora] site you author in AsciiDoc.
-* **Right pane** -- one or more tabs such as:
-** A web terminal (SSH to a bastion, containerised CLI tools, or both).
-** The OpenShift web console embedded in an iframe.
-** A VS Code editor (Code Server).
-** A VNC desktop (noVNC).
-** Any external URL you choose.
+In this hands-on lab, we'll introduce you to some advanced capabilities of Automation Execution so can benefit even more from using Ansible Automation Platform (often abbreviated as AAP).
+You'll learn how to:
 
-The UI layout, tab names, and tab URLs are all controlled by a simple `ui-config.yml` file that lives in your content repository.
+* Configure automation execution resources with Ansible
+* Employ automation execution workflows so teams can collaborate more efficiently.
+* Use surveys and the revamped RBAC system to give your users self-service access.
+* Use dynamic inventories to scale your automation.
+* Get more flexibility with the constructed inventory feature.
+* Secure the automation supply chain with content signing that ensures only approved content runs in automation execution.
 
-== How It Gets Deployed
+NOTE: This lab is ideal for anyone with basic Ansible Automation Platform experience looking to expand their automation skills.
 
-This Ansible collection -- `agnosticd.showroom` -- is the primary way Showroom instances are deployed on the Red Hat Demo Platform.
-Depending on the environment type, you use one of two roles:
 
-[cols="1,3",options="header"]
-|===
-|Role |Use when...
+== Lab Infrastructure
 
-|`ocp4_workload_showroom`
-|Your lab runs on an OpenShift 4 cluster.
-The role deploys Showroom as a pod using a Helm chart, complete with content rendering, terminals, and an OpenShift `Route`.
+Your lab includes a number of servers:
 
-|`vm_workload_showroom`
-|Your lab runs on a VM (RHEL, Fedora, etc.).
-The role deploys Showroom with rootless Podman, Traefik for TLS, and systemd for lifecycle management.
-|===
+- A bastion host running VS Code server and Gitea server.
+  You'll also use the command line there to do some Ansible development.
+- A one-node AAP cluster.
+- Two managed RHEL 9 hosts.
 
-Both roles follow the same basic flow:
+[TIP]
+====
+. All access information has been summarized for your convenience on page link:lab-access.html[Lab Access].
+. This page and all others are accessible from the upper left corner image:corner_menu.png[role=half-width] on narrow screens, the menu is expanded to the left on broader screens.
+====
 
-. Clone your Antora content repository.
-. Inject runtime variables (credentials, hostnames, GUIDs) as AsciiDoc attributes.
-. Render the content to HTML.
-. Serve the content alongside the terminal and tab services you configured.
-. Publish the final URL back to the user.
+== Working the Lab
 
-== Key Concepts
+Some hints to get you started:
 
-Content repository::
-A Git repo containing your AsciiDoc lab instructions, structured as an Antora component.
-You typically fork https://github.com/rhpds/showroom_template_nookbag[showroom_template_nookbag] and add your own pages.
-See xref:content-repo.adoc[].
+- Don’t type everything manually, use copy & paste from the browser when appropriate, but take your time to understand what you are actually doing.
+- To **edit files** or **open a terminal window**, we provide **VS Code Server**, basically the great Visual Studio Code Editor running in your browser.
+- You can click on any screenshot to magnify it in a new window or tab.
+  Once done, simply close the window or tab to come back to the instructions.
+- Copy & Paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the pop-up menu summoned by a right mouse-click always works.
 
-AgnosticV catalog item::
-The YAML configuration in the https://github.com/rhpds/agnosticv[agnosticv] repository that ties your content repo to an environment on the Red Hat Demo Platform.
-See xref:agnosticv-config.adoc[].
+== Finding your way in the lab
 
-User data::
-A set of key-value pairs (hostnames, passwords, URLs) written by infrastructure roles during provisioning and automatically injected into your content as Antora attributes.
-See xref:user-data.adoc[].
+If you're reading these lines, you should see a WebUI looking like the following screenshot.
+We call this user interface "Showroom" so don't wonder if you see this name here and there.
 
-UI configuration::
-A `ui-config.yml` file in your content repo that defines the tabs, layout width, and dynamic URLs shown alongside your lab instructions.
-See xref:ui-config.adoc[].
+.Showroom navigation overview
+image::showroom.drawio.png[Showroom navigation overview,link=self,window=_blank]
 
-== Where to Start
+The lab instructions are made of chapters, or exercises, which you should do in order, not forgetting steps as they might be relevant to following exercises.
 
-[cols="1,3",options="header"]
-|===
-|Goal |Page
+You can jump back to a specific chapter using the list in the top left corner.
+Each chapter has a title and a table of content, which might be located at the top of the instructions or as a separate menu to the right, depending on your browser width.
 
-|Get a Showroom lab running quickly
-|xref:quick-start.adoc[]
+On the right side, there are different tabs each offering a different access to your environment, described in more details in the next chapter.
+You may use the resizing handle in the middle to give more space to the environment or to the instructions.
 
-|Create or structure a content repo
-|xref:content-repo.adoc[]
+TIP: If you don't see the right hand tabs in your environment, don't worry, you can also access the environment directly, as explained in the next chapter.
 
-|Wire up an AgnosticV catalog item
-|xref:agnosticv-config.adoc[]
+== Accessing your Lab Environment
 
-|Understand the full architecture
-|xref:architecture.adoc[]
+As hinted in the previous chapter, you can access most elements of the environment through the showroom tabs.
+If in doubt, check the xref:lab-access.adoc[Lab Access] section.
 
-|Contribute to Showroom itself
-|xref:contributing.adoc[]
-|===
+The following chapters explain in more details how to access the command line.
 
-== Related Projects
+=== Using VS Code
 
-* https://github.com/agnosticd/showroom[agnosticd.showroom collection] -- this Ansible collection (you are here).
-* https://github.com/rhpds/showroom_template_nookbag[showroom_template_nookbag] -- the recommended content repo template.
-* https://github.com/rhpds/showroom-deployer[showroom-deployer] -- Helm charts that power OCP deployments.
-* https://github.com/rhpds/showroom-images[showroom-images] -- container images (content server, terminals, Antora, etc.).
-* https://github.com/rhpds/nookbag[nookbag] -- the zero-touch UI bundle.
+Your main point of contact with the lab is **VS Code Server**, providing a VS Code-experience in your browser. You'll use VS Code to open terminals and to edit files (either in the build-in GUI editor or just using your favorite editor on the command line).
+
+Now, open **VS Code** by clicking on the URL {z_vscode_web_ui_url}[window=_blank], or click on the "Codeserver" tab (which should be the default).
+
+You should be greeted with a login screen:
+
+image::vscode-pwd.png[500,300,link=self,window=_blank]
+
+Use the password **{z_vscode_web_ui_password}** to log in to the **VS Code** server web UI. Now open a new terminal by heading to the menu item **Terminal** at the top of the **VS Code** UI and select **New Terminal** (the menu item might be hidden depending on browser width, behind three dots). A new section will appear in the lower half of the screen and you will be greeted with a prompt:
+
+image::vscode-terminal.png[link=self,window=_blank]
+
+Congrats, you now have a shell terminal on your bastion node you can use to work on the command line. From here you run commands or access the other hosts in your lab environment, if the lab task requires it.
+
+=== OPTIONAL: Direct Lab Access using SSH
+
+You can of course use SSH directly to access the bastion node when you have an SSH client ready to go and know your way around:
+
+[subs="attributes",source,shell,role=execute]
+----
+ssh {z_ssh_user}@{z_bastion_host_name}
+----
+
+The password is still the same: {z_ansible_controller_admin_password}
+
+TIP: The user to access the terminal is `{z_ssh_user}`, but your bastion node is setup to let you become `root` using _sudo_ without a password.
+
+TIP: All access information has been summarized for your convenience under xref:lab-access.adoc[Lab Access], accessible in the navigation menu to the right.
+
+The "Terminal" tab gives you the same impression as SSH without the need to login, you're directly on the bastion host.
+
+== Lab Configuration
+
+Most prerequisite tasks have already been fulfilled for you:
+
+- Ansible software is installed
+- `sudo` has been configured on the managed hosts to run commands that require root privileges.
+- An `.ansible-navigator.yml` configuration file has been created.
+Without it, you would have to add parameters to each execution of `ansible-navigator`.
+
+== Brief Introduction to `ansible-navigator`
+
+During this lab, you will always use `ansible-navigator` which supersedes the capabilities of `ansible-playbook`. Let's check Ansible Navigator has been installed correctly (your browser might ask for permission for pasting):
+
+[source,shell,role=execute]
+----
+ansible-navigator --version
+----
+
+where the result should be something like (your actual version might differ):
+
+[source,shell]
+----
+ansible-navigator 25.1.0
+----
+
+Have now a look at your Ansible Navigator configuration file. It's a dot file in your user's home directory and can be printed to screen with the following command:
+
+[source,shell,role=execute]
+----
+cat ~/.ansible-navigator.yml
+----
+
+You can also open the file in VS Code by using the navigation bar on the left or the "Open File" command from the "File" menu.
+
+Note the following parameters within the `execution-environment` section:
+
+- `image`: where the default execution environment is set, we have switched it to your **private automation hub**
+- `pull.policy`: set to **missing**, only download the execution environment if it doesn't already exist locally.
+- `environment-variables`: since execution environments are basically Linux containers, which don't have access to your environment variables, we have to compile a list of variables we want to have passed through to the container, or even specifically defined.
+
+For a full listing of every configurable knob checkout the link:https://ansible.readthedocs.io/projects/navigator/settings/[settings documentation,window=_blank].
+
+NOTE: For your convenience, we have pre-configured the authentication credentials for Ansible Automation Platform, so you won’t need to log in manually. However, in real-world scenarios, it's best to avoid this practice, as storing passwords in a plaintext configuration file can pose security risks.
+
+Run the `ansible-navigator` command with the `images` argument to look at execution environments configured on the control node:
+
+[source,shell,role=execute]
+----
+ansible-navigator images
+----
+
+image::navigator-images.png[link=self,window=_blank]
+
+NOTE: The output you see might differ from the above output, but you should see at least the one image configured in the file.
+Beware that the procedure might take one or two minutes to pull and save the image locally.
+
+This command gives you information about all currently installed Execution Environments or EEs for short. Investigate an EE by pressing the corresponding number. For example pressing **0** with the above example will open the `ee-supported-rhel8` execution environment:
+
+image::navigator-ee-menu.png[link=self,window=_blank]
+
+Selecting e.g. **0** for `Image information` will show information about the execution environment image you are inspecting:
+
+image::navigator-ee-info.png[link=self,window=_blank]
+
+To get back to the preceding view in `ansible-navigator` press **Esc**, if needed several times.
+The last press in the main menu will get you out of Navigator.
+Alternatively you can type **:q** anywhere to exit at once (familiar with Vi?).
