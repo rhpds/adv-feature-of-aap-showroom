@@ -55,9 +55,9 @@ ansible-navigator:
       pass:
         - GUID
       set:
-        CONTROLLER_HOST: "{z_ansible_controller_web_ui_url}"
+        CONTROLLER_HOST: "{controller_url}"
         CONTROLLER_USERNAME: "{z_ansible_controller_admin_username}"
-        CONTROLLER_PASSWORD: "{z_ansible_controller_admin_password}"
+        CONTROLLER_PASSWORD: "{controller_password}"
         CONTROLLER_VERIFY_SSL: "True"
 ----
 
@@ -111,7 +111,7 @@ To leave, press `Esc` multiple times to get up again in the views and eventually
 IMPORTANT: Do **not** leave the Navigator TUI (Text User Interface) before the job is finished!
 Check the colored text box in the bottom-right corner, it must go from [.green-background]#Running# to [.green-background]#Successful#.
 
-After the successful run, log into your {z_ansible_controller_web_ui_url}[Ansible Automation Platform web UI,window=blank], using the user *{z_ansible_controller_admin_username}* and the usual password *{z_ansible_controller_admin_password}*.
+After the successful run, log into your {controller_url}[Ansible Automation Platform web UI,window=blank], using the user *{z_ansible_controller_admin_username}* and the usual password *{controller_password}*.
 Open **Automation Execution** and make sure that you see the configured objects and a job "Source Control Update" successfully executed which cloned the git repository.
 
 TIP: If you run this Ansible Playbook multiple times, you will notice the **ansible.controller.credential** module is not idempotent!

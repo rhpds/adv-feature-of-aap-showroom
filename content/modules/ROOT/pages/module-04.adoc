@@ -103,8 +103,8 @@ Create now the user as follows:
 . Click the **Create user** button
 . Fill in the values for the new user:
 ** **Username:** nightshift
-** **Password:** {z_ansible_controller_admin_password}
-** **Confirm Password:** {z_ansible_controller_admin_password}
+** **Password:** {controller_password}
+** **Confirm Password:** {controller_password}
 ** **First Name:** Night
 ** **Last Name:** Shift
 ** **Email:** nightshift@example.com
@@ -162,7 +162,7 @@ If you go to **Automation Execution ⇒ Templates**, open the `Deploy Webapplica
 == Test the restricted user
 
 You've now setup the required user and permissions.
-To test everything, log out of AAP’s web UI and in again as the `nightshift` user with password **{z_ansible_controller_admin_password}**.
+To test everything, log out of AAP’s web UI and in again as the `nightshift` user with password **{controller_password}**.
 
 . Go to the **Automation Execution ⇒ Templates** view, you should notice that for `nightshift` only the `Deploy Webapplication` template is visible.
  The user is allowed to view and launch, and approve, but not to edit the Template.

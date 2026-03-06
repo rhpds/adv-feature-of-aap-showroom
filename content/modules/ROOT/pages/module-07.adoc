@@ -29,7 +29,7 @@ Next, you need the repository from Gitea in your home directory on the bastion h
 $ ls -l ~
 
 total 4
-drwxr-xr-x. 5 {z_ssh_user} users 4096 Apr 24 13:10 {gitea_controller_project}
+drwxr-xr-x. 5 {ssh_username} users 4096 Apr 24 13:10 {gitea_controller_project}
 ----
 
 You have to configure Git locally, run:

@@ -5,12 +5,12 @@
 With Ansible Automation Platform 2.5 we have introduced a new, unified Web UI.
 It provides consistent access to the components of AAP in one interface. 
 
-To access the UI, click on the URL {z_ansible_controller_web_ui_url}[window=blank] to open it in a new browser tab, or in Showroom click on the "AAP" tab.
+To access the UI, click on the URL {controller_url}[window=blank] to open it in a new browser tab, or in Showroom click on the "AAP" tab.
 Both will take you to the AAP login page:
 
 image::aap-login.png[500,300,link=self,window=blank]
 
-Login as user **lab-user** with the password **{z_ansible_controller_admin_password}**. This will open the shiny new UI, let's have a look around.
+Login as user **lab-user** with the password **{controller_password}**. This will open the shiny new UI, let's have a look around.
 
 TIP: Depending on the width of your browser window the main menu to the left might be hidden. Just click the "Hamburger-style" button in the upper left and it will fold out (see below for more details). Or just resize your browser... ;-)
 
