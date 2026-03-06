@@ -138,7 +138,7 @@ chmod +x /home/{z_bastion_ssh_user_name}/dyninv.sh
 
 This should give you the same output as above.
 
-As simple as it gets, right? More information can be found on https://docs.ansible.com/ansible/latest/dev_guide/developing_inventory.html[how to develop dynamic inventories,window=_blank].
+As simple as it gets, right? More information can be found on https://docs.ansible.com/ansible/latest/dev_guide/developing_inventory.html[how to develop dynamic inventories,window=blank].
 
 So, now you have a source of a (slightly static) dynamic inventory (talk about an oxymoron…) and a script to fetch and pass it to the automation execution.
 
@@ -168,7 +168,7 @@ You can directly proceed to adding the dynamic inventory and pointing it to the 
 . Go back to the *Sources* tab of the Cloud inventory
 . Start the inventory update by clicking the rocket icon
 
-image::inventory-source.png[800,600,link=self,window=_blank]
+image::inventory-source.png[800,600,link=self,window=blank]
 
 Navigate to *Jobs* in the *Automation Execution* section to watch the initial sync, the *Type* is `Inventory Sync`.
 

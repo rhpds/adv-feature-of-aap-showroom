@@ -14,7 +14,7 @@ You will clone this repository locally to you bastion host and then see how auto
 
 === Access Gitea
 
-Point your browser to {z_gitea_web_ui_url}[window=_blank] (there is no tab -yet- for it in Showroom).
+Point your browser to {z_gitea_web_ui_url}[window=blank] (there is no tab -yet- for it in Showroom).
 
 Sign in to Gitea as user `{z_gitea_web_ui_username}` with the password `{z_gitea_web_ui_password}`.
 
@@ -249,7 +249,7 @@ git push
 VS Code will open a _small_ dialog at the top of the window asking for username and password, else git in the terminal will simply ask for username and password.
 In both cases, enter `{z_gitea_web_ui_username}` respectively `{z_gitea_web_ui_password}`.
 
-image::vscode-git-login.png[800,600,link=self,window=_blank]
+image::vscode-git-login.png[800,600,link=self,window=blank]
 
 == Setup Automation Execution
 

@@ -1,14 +1,26 @@
 = You've done it!
 
-Congratulations, you've completed the lab!
-We hope you've enjoyed it, here is what you should take with you:
+== What You've Learned
 
-* You've discovered the new UI,
-* configured AAP using Ansible itself and the principles of Configuration as Code (CaC) for maximum automation,
-* used workflows to orchestrate your automation,
-* applied a survey to customize the result,
-* used dynamic and constructed inventories to flexibly extend the scope of your automation,
-* and applied RBAC and code signing to secure your supply chain!
+Congratulations! In this lab, you have:
+
+* Discovered the new unified UI for Ansible Automation Platform 2.5
+* Configured AAP using Ansible and Configuration as Code (CaC) principles for maximum automation
+* Used workflows to orchestrate your automation and enable efficient team collaboration
+* Applied surveys to customize automation execution results
+* Implemented RBAC (Role-Based Access Control) for secure self-service access
+* Used dynamic and constructed inventories to flexibly extend the scope of your automation
+* Applied content signing to secure your automation supply chain
+
+== References
+
+* link:https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/[Red Hat Ansible Automation Platform 2.5 Documentation^]
+* link:https://www.redhat.com/en/technologies/management/ansible/event-driven-ansible[Event Driven Ansible (Decisions)^]
+* link:https://www.redhat.com/en/technologies/management/ansible/content-collections[Ansible Content Collections^]
+* link:https://www.redhat.com/en/technologies/management/ansible/development-tools[Ansible Development Tools^]
+* link:https://redhat-cop.github.io/aap_config_as_code_docs/[Configuration as Code Documentation^]
+
+== Next Steps
 
 If you want to redo some of the exercises, or share your experience with others, simply https://www.redhat.com/en/technologies/management/ansible/trial[spin up your own trial instance^], create a RHEL host with `ansible-navigator` and `ansible-sign` installed, and spin up two generic RHEL hosts.
 With some adaptation, you should then be able to follow most of the https://rhpds.github.io/showroom-lb1706-advance-feature-of-aap/modules/index.html[(generic) guide available online^].
@@ -23,5 +35,3 @@ Webdev Git Repo:: https://gitlab.com/ansible-labs-crew/playbooks-dev.git[^]
 Webops Git Repo:: https://gitlab.com/ansible-labs-crew/playbooks-ops.git[^]
 
 CAUTION: You might need to adapt slightly some of the code to your environment to make everything work correctly.
-
-And there is more than Automation Execution to discover in AAP, with https://www.redhat.com/en/technologies/management/ansible/event-driven-ansible[Event Driven Ansible (Decisions)^], https://www.redhat.com/en/technologies/management/ansible/content-collections[prepared content^] and the many https://www.redhat.com/en/technologies/management/ansible/development-tools[developer tools^], your ability to automate becomes limitless.

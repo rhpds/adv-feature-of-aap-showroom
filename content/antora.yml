@@ -1,5 +1,6 @@
 name: modules
-title: Showroom Collection
+title: LB1347 - Advanced Features of Ansible Automation Platform - Automation Controller
 version: ~
+start_page: index.adoc
 nav:
   - modules/ROOT/nav.adoc

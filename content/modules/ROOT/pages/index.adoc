@@ -4,10 +4,10 @@
 
 Already know the basics of Red Hat Ansible Automation Platform and want more?
 
-NOTE: Since Ansible Automation Platform 2.5, Automation Controller is now accessible through the automation execution interface in the new UI, providing the same capabilities.
+NOTE: Since Ansible Automation Platform (AAP) 2.5, Automation Controller is now accessible through the automation execution interface in the new UI, providing the same capabilities.
 If you're familiar with previous versions of AAP, note that from now on, we will refer to _automation controller_ as _Automation Execution_ to align with the latest terminology.
 
-In this hands-on lab, we'll introduce you to some advanced capabilities of Automation Execution so can benefit even more from using Ansible Automation Platform (often abbreviated as AAP).
+In this hands-on lab, we'll introduce you to some advanced capabilities of Automation Execution so you can benefit even more from using AAP.
 You'll learn how to:
 
 * Configure automation execution resources with Ansible
@@ -51,7 +51,7 @@ If you're reading these lines, you should see a WebUI looking like the following
 We call this user interface "Showroom" so don't wonder if you see this name here and there.
 
 .Showroom navigation overview
-image::showroom.drawio.png[Showroom navigation overview,link=self,window=_blank]
+image::showroom.drawio.png[Showroom navigation overview,link=self,window=blank]
 
 The lab instructions are made of chapters, or exercises, which you should do in order, not forgetting steps as they might be relevant to following exercises.
 
@@ -74,15 +74,15 @@ The following chapters explain in more details how to access the command line.
 
 Your main point of contact with the lab is **VS Code Server**, providing a VS Code-experience in your browser. You'll use VS Code to open terminals and to edit files (either in the build-in GUI editor or just using your favorite editor on the command line).
 
-Now, open **VS Code** by clicking on the URL {z_vscode_web_ui_url}[window=_blank], or click on the "Codeserver" tab (which should be the default).
+Now, open **VS Code** by clicking on the URL {z_vscode_web_ui_url}[window=blank], or click on the "Codeserver" tab (which should be the default).
 
 You should be greeted with a login screen:
 
-image::vscode-pwd.png[500,300,link=self,window=_blank]
+image::vscode-pwd.png[500,300,link=self,window=blank]
 
 Use the password **{z_vscode_web_ui_password}** to log in to the **VS Code** server web UI. Now open a new terminal by heading to the menu item **Terminal** at the top of the **VS Code** UI and select **New Terminal** (the menu item might be hidden depending on browser width, behind three dots). A new section will appear in the lower half of the screen and you will be greeted with a prompt:
 
-image::vscode-terminal.png[link=self,window=_blank]
+image::vscode-terminal.png[link=self,window=blank]
 
 Congrats, you now have a shell terminal on your bastion node you can use to work on the command line. From here you run commands or access the other hosts in your lab environment, if the lab task requires it.
 
@@ -143,7 +143,7 @@ Note the following parameters within the `execution-environment` section:
 - `pull.policy`: set to **missing**, only download the execution environment if it doesn't already exist locally.
 - `environment-variables`: since execution environments are basically Linux containers, which don't have access to your environment variables, we have to compile a list of variables we want to have passed through to the container, or even specifically defined.
 
-For a full listing of every configurable knob checkout the link:https://ansible.readthedocs.io/projects/navigator/settings/[settings documentation,window=_blank].
+For a full listing of every configurable knob checkout the link:https://ansible.readthedocs.io/projects/navigator/settings/[settings documentation,window=blank].
 
 NOTE: For your convenience, we have pre-configured the authentication credentials for Ansible Automation Platform, so you won’t need to log in manually. However, in real-world scenarios, it's best to avoid this practice, as storing passwords in a plaintext configuration file can pose security risks.
 
@@ -154,18 +154,18 @@ Run the `ansible-navigator` command with the `images` argument to look at execut
 ansible-navigator images
 ----
 
-image::navigator-images.png[link=self,window=_blank]
+image::navigator-images.png[link=self,window=blank]
 
 NOTE: The output you see might differ from the above output, but you should see at least the one image configured in the file.
 Beware that the procedure might take one or two minutes to pull and save the image locally.
 
 This command gives you information about all currently installed Execution Environments or EEs for short. Investigate an EE by pressing the corresponding number. For example pressing **0** with the above example will open the `ee-supported-rhel8` execution environment:
 
-image::navigator-ee-menu.png[link=self,window=_blank]
+image::navigator-ee-menu.png[link=self,window=blank]
 
 Selecting e.g. **0** for `Image information` will show information about the execution environment image you are inspecting:
 
-image::navigator-ee-info.png[link=self,window=_blank]
+image::navigator-ee-info.png[link=self,window=blank]
 
 To get back to the preceding view in `ansible-navigator` press **Esc**, if needed several times.
 The last press in the main menu will get you out of Navigator.

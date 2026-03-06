@@ -143,4 +143,4 @@ Name your groups (and roles and playbooks, as part of collections) like Python v
 
 == Conclusion
 
-If you want to learn more about constructed inventories, there is a great https://www.redhat.com/en/blog/how-to-use-the-new-constructed-inventory-feature-in-aap-2.4[Blog Post,window=_blank] and of course the https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/using_automation_execution/controller-inventories#ref-controller-constructed-inventories[Using automation execution documentation,window=_blank].
+If you want to learn more about constructed inventories, there is a great https://www.redhat.com/en/blog/how-to-use-the-new-constructed-inventory-feature-in-aap-2.4[Blog Post,window=blank] and of course the https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/using_automation_execution/controller-inventories#ref-controller-constructed-inventories[Using automation execution documentation,window=blank].
