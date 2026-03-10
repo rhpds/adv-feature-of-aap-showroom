@@ -4,3 +4,32 @@ version: ~
 start_page: index.adoc
 nav:
   - modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    # attributes only defined in Showroom
+    node1_hostname: node1
+    node2_hostname: node2
+    gitea_controller_project: playbooks-adv-controller
+    ee_supported_image: ee-supported-rhel9:latest
+    # placeholders for attributes overwritten by the lab
+    bastion_public_hostname: "MYBASTION.apps.ocpvdev01.rhdp.net"
+    bastion_ssh_password: "MYBASTIONSSHPASSWORD"
+    bastion_ssh_port: "MYBASTIONSSHPORT"
+    bastion_ssh_user_name: "MYBASTIONSSHUSER"
+    common_password: "MYCOMMONPASSWORD"
+    controller_password: "MYCTLPASSWORD"
+    controller_url: "https://MYCTLHOST.apps.ocpvdev01.rhdp.net"
+    controller_username: "MYCTLUSER"
+    gitea_password: "MYGITEAPASSWORD"
+    gitea_url: "https://MYGITEAHOST.apps.ocpvdev01.rhdp.net"
+    gitea_username: "MYGITEAUSER"
+    password: "MYPASSWORD"
+    ssh_command: "ssh MYSSHUSER@MYSSHHOST -p MYSSHPORT"
+    ssh_host: "MYWRONGSSHHOST"
+    ssh_hostname: "MYSSHHOST"
+    ssh_password: "MYSSHPASSWORD"
+    ssh_port: "MYSSHPORT"
+    ssh_username: "MYSSHUSER"
+    user: "MYUSER"
+    vscode_server_password: "MYVSCODEPASSWORD"
+    vscode_server_url: "https://MYVSCODEHOST.apps.ocpvdev01.rhdp.net"
