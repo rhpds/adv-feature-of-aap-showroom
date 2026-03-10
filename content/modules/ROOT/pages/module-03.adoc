@@ -40,7 +40,7 @@ TIP: If you want to know what the Playbooks look like, check out the Git URL in 
 
 == Access the Automation Execution UI
 
-In your browser open {controller_url}[window=blank] (or click on the tab "AAP" on the right of those instructions) and login as user `{z_ansible_controller_admin_username}` with the password `{controller_password}`.
+In your browser open {controller_url}[window=blank] (or click on the tab "AAP" on the right of those instructions) and login as user `{controller_username}` with the password `{controller_password}`.
 
 == Configure the Workflow
 

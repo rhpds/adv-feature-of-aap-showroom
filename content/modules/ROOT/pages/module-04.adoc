@@ -176,7 +176,7 @@ To test everything, log out of AAP’s web UI and in again as the `nightshift` u
 curl http://{node1_hostname}/nodejs
 ----
 
-. In the web UI, log out user `nightshift` and in again as `{z_ansible_controller_admin_username}`.
+. In the web UI, log out user `nightshift` and in again as `{controller_username}`.
 
 == Conclusion
 
