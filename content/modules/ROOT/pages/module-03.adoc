@@ -40,7 +40,7 @@ TIP: If you want to know what the Playbooks look like, check out the Git URL in 
 
 == Access the Automation Execution UI
 
-In your browser open {controller_url}[window=blank] (or click on the tab "AAP" on the right of those instructions) and login as user `{controller_username}` with the password `{controller_password}`.
+In your browser open {controller_url}[window=blank] (or click on the tab "AAP" on the right of this instructions) and login as user `{controller_username}` with the password `{controller_password}`.
 
 == Configure the Workflow
 
@@ -61,15 +61,14 @@ After saving the template the **Workflow Visualizer** opens to allow you to buil
 . First, select the node type **Job Template**
 . Choose the **Web Infra Deploy** Template
 . Click **Next** then **Finish**
-+
-You get into the **Workflow Visualizer** overview showing the first workflow node.
 
-** The node gets annotated with the name of the job.
-** Click the kebab-style menu right next to the existing node "Web Infra Deploy", you’ll see a number of options appearing:
+You get into the **Workflow Visualizer** overview showing the first workflow node. The node gets annotated with the name of the job.
+
+. Click the kebab-style menu right next to the existing node "Web Infra Deploy", you’ll see a number of options appearing:
 image:workflow-node-edit.png[width="80",height="200",float="right",link=self,window=blank]
-*** **Edit step** to edit the current workflow node
-*** **Add step and link** to add new workflow node
-*** and a **Remove step** to delete current workflow node.
+** **Edit step** to edit the current workflow node
+** **Add step and link** to add new workflow node
+** and a **Remove step** to delete current workflow node.
 
 . We want to add another workflow node, so click the **Add step and link** sign
 . Choose **Web App Deploy** as the next Job Template.
@@ -89,7 +88,7 @@ image::webapplication-workflow.png[Workflow deploying Web Infra and App,link=sel
 
 Your **Deploy Webapplication** workflow is ready to go, launch it.
 
-Click the **Launch** button directly (potentially hidden behind a kebap-style/3 dots menu item) or go to the the **Templates** view and launch the **Deploy Webapplication** workflow by clicking the rocket icon.
+Click the **Launch workflow** button directly or go to the the **Templates** view and launch the **Deploy Webapplication** workflow by clicking the rocket icon.
 
 image::job_workflow.png[link=self,window=blank]
 

@@ -58,15 +58,14 @@ The lab instructions are made of chapters, or exercises, which you should do in 
 You can jump back to a specific chapter using the list in the top left corner.
 Each chapter has a title and a table of content, which might be located at the top of the instructions or as a separate menu to the right, depending on your browser width.
 
-On the right side, there are different tabs each offering a different access to your environment, described in more details in the next chapter.
+On the right side, there are different tabs providing access to the elements of your lab, described in more details in the next chapter.
 You may use the resizing handle in the middle to give more space to the environment or to the instructions.
 
 TIP: If you don't see the right hand tabs in your environment, don't worry, you can also access the environment directly, as explained in the next chapter.
 
 == Accessing your Lab Environment
 
-As hinted in the previous chapter, you can access most elements of the environment through the showroom tabs.
-If in doubt, check the xref:lab-access.adoc[Lab Access] section.
+As hinted in the previous chapter, you can access most elements of the environment through the showroom tabs but you have the option to access the lab in separate browser tabs, too. For the access details, check the xref:lab-access.adoc[Lab Access] section.
 
 The following chapters explain in more details how to access the command line.
 
@@ -159,7 +158,7 @@ image::navigator-images.png[link=self,window=blank]
 NOTE: The output you see might differ from the above output, but you should see at least the one image configured in the file.
 Beware that the procedure might take one or two minutes to pull and save the image locally.
 
-This command gives you information about all currently installed Execution Environments or EEs for short. Investigate an EE by pressing the corresponding number. For example pressing **0** with the above example will open the `ee-supported-rhel8` execution environment:
+This command gives you information about all currently installed Execution Environments or EEs for short. Investigate an EE by pressing the corresponding number. For example pressing **0** with the above example will open the `ee-supported-rhel9` execution environment:
 
 image::navigator-ee-menu.png[link=self,window=blank]
 
