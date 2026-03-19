@@ -166,7 +166,7 @@ You can directly proceed to adding the dynamic inventory and pointing it to the 
 ** *Cache timeout (seconds)*: 300
 . Click on *Create source*
 . Go back to the *Sources* tab of the Cloud inventory
-. Start the inventory update by clicking the rocket icon
+. Start the inventory update by clicking the circular arrows icon
 
 image::inventory-source.png[800,600,link=self,window=blank]
 

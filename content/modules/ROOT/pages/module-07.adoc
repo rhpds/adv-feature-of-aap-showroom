@@ -8,13 +8,13 @@ The best way to understand how this works is, as most times, to give it a try. R
 
 In your lab environment you'll find an instance of the `Gitea` Git service. A Git repository with Ansible content has been cloned to it already (it's actually the repository holding supporting Playbooks for this lab).
 
-You will clone this repository locally to you bastion host and then see how automation controller can be used to check for signed content.
+You will clone this repository locally to your bastion host and then see how automation controller can be used to check for signed content.
 
 == Prepare Repository
 
 === Access Gitea
 
-Point your browser to {gitea_url}[window=blank] (there is no tab -yet- for it in Showroom).
+Go to the Showroom tab **Gitea** or point your browser to {gitea_url}[window=blank].
 
 Sign in to Gitea as user `{gitea_username}` with the password `{gitea_password}`.
 
@@ -39,6 +39,7 @@ You have to configure Git locally, run:
 cd ~/{gitea_controller_project}
 git config --global user.name "Your Name"
 git config --global user.email you@example.com
+cd
 ----
 
 == Sign Repository Content

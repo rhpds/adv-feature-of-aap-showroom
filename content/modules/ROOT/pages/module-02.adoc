@@ -89,7 +89,7 @@ Tasks:
 * **Add hosts to inventory**: Hosts are added to the inventory.
 * **Machine Credentials**: Machine credentials are created.
 +
-TIP: SSH keys have already been created and distributed in your lab environment and `sudo` has been setup on the managed hosts to allow password-less login. When you SSH into a host as a regular user from the bastion node you will become user **ec2-user** on the host you logged in.
+TIP: SSH keys have already been created and distributed in your lab environment and `sudo` has been setup on the managed hosts to allow password-less login. When you SSH into a host as a regular user from the bastion node you will become user **lab-user** on the host you logged in.
 
 * **Create Projects**: different projects are created based on public Git repos which we have synced to your environment (check how we define the scm variable if you're interested in the details).
 
@@ -112,7 +112,7 @@ IMPORTANT: Do **not** leave the Navigator TUI (Text User Interface) before the j
 Check the colored text box in the bottom-right corner, it must go from [.green-background]#Running# to [.green-background]#Successful#.
 
 After the successful run, log into your {controller_url}[Ansible Automation Platform web UI,window=blank], using the user *{controller_username}* and the usual password *{controller_password}*.
-Open **Automation Execution** and make sure that you see the configured objects and a job "Source Control Update" successfully executed which cloned the git repository.
+Open **Automation Execution** and make sure that you see the configured objects and that three jobs "Source Control Update" have successfully been executed which cloned the git repositories.
 
 TIP: If you run this Ansible Playbook multiple times, you will notice the **ansible.controller.credential** module is not idempotent!
 Since automation controller stores the SSH key encrypted, the Ansible Module is unable to verify it has already been set and didn't change.

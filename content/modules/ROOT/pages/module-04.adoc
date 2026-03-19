@@ -66,8 +66,7 @@ For this you have to leverage the RBAC (Role Base Access Control) features of AA
 
 Since AAP 2.5, access management is handled in one central place across all services offered by AAP.
 Automation Execution (aka controller) is only one of those services.
-For this reason, we need to navigate down to the **Access Management** section of AAP.
-There you click on the **Roles** entry, and make sure you are in the **Automation Execution** tab.
+For this reason, we need to navigate down to the **Access Management** section of AAP, there you click on the **Roles** entry.
 
 First filter on "Workflow".
 You can verify that no built-in role allows to execute _and_ approve a workflow, without being able to modify or delete them.
@@ -86,18 +85,19 @@ So we decide to create our own role for them:
 
 * Click on the blue **Create role** button (potentially hidden behind a 3 dots menu), and enter:
 ** **Name:** WorkflowNightShifter
-** **Content type:** Workflow job template
+** **Desscription:** Nightshift workflow
+** **Resource type:** Workflow job template
 ** **Permissions:** (select the following ones)
-*** [x] Approve workflow job template
-*** [x] Execute workflow job template
-*** [x] View workflow job template
+*** [x] Can approve steps in this workflow job template
+*** [x] Can run this workflow job template
+*** [x] Can view workflow job template
 * Press the blue **Create role** button
 
 Back to Automation Execution Roles and again filtering on "Workflow", you can easily see that our new role is "Editable" and not "Built-in".
 
 === Create User
 
-Create now the user as follows:
+Now create the user:
 
 . In the AAP web UI menu under **Access Management ⇒ Users**
 . Click the **Create user** button
@@ -108,7 +108,7 @@ Create now the user as follows:
 ** **First Name:** Night
 ** **Last Name:** Shift
 ** **Email:** nightshift@example.com
-** **User Type:** (make sure everything is unchecked for a normal user)
+** **User Type:** Normal user
 ** **Organization:** Default
 . Click **Create user**
 
@@ -130,9 +130,9 @@ Create a Team:
 Now you can add the new user to the team:
 
 . Switch to the **Users** tab (staying in the `NightShifters` team view)
-. Click the **Add users** button
+. Click the **Assign users** button
 . Select the `nightshift` user
-. Click **Add users**
+. Click **Assign users**
 
 User `nightshift` is now a member of the `NightShifters` Team.
 
@@ -146,7 +146,7 @@ Add the permission to use the template:
 
 . Open the Team `NightShifters` under **Access Management ⇒ Teams**
 . Go to the **Roles** tab
-. Click the blue **Add roles** button
+. Click the blue **Assign roles** button
 . A new dialog opens.
   You can choose to set permissions for a number of resources:
 ** **Select a resource type:** Workflow job templates
