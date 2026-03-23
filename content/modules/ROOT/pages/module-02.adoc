@@ -56,14 +56,15 @@ ansible-navigator:
         - GUID
       set:
         CONTROLLER_HOST: "{controller_url}"
-        CONTROLLER_USERNAME: "{controller_username}"
         CONTROLLER_PASSWORD: "{controller_password}"
-        CONTROLLER_VERIFY_SSL: "True"
+        CONTROLLER_USERNAME: "{controller_username}"
+        CONTROLLER_VERIFY_SSL: "False"
 ----
 
 The environment variables prefixed with `CONTROLLER_` are the connection and credential parameters.
 
-NOTE: For your convenience we added the authentication credentials for automation controller to the configuration, so you don't have to manually log in. In most real world scenarios you probably don't want to do this and will not store your password in a clear text configuration file.
+NOTE: For your convenience we added the authentication credentials for automation controller to the configuration, so you don't have to manually log in.
+In most real world scenarios you probably don't want to do this and will not store your password in a clear text configuration file.
 
 TIP: For performance and security reasons, it is recommended "in real life" to generate and use a token for your automation.
 Check the https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/using_content_navigator/[ansible-navigator^] documentation for details on how to do this.

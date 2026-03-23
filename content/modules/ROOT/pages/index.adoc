@@ -73,7 +73,7 @@ The following chapters explain in more details how to access the command line.
 
 Your main point of contact with the lab is **VS Code Server**, providing a VS Code-experience in your browser. You'll use VS Code to open terminals and to edit files (either in the build-in GUI editor or just using your favorite editor on the command line).
 
-Now, open **VS Code** by clicking on the URL {vscode_server_url}[window=blank], or click on the "Codeserver" tab (which should be the default).
+Now, open **VS Code** by clicking on the URL {vscode_server_url}[window=blank], or click on the "@Codeserver" tab (which should be the default).
 
 You should be greeted with a login screen:
 
