@@ -15,6 +15,8 @@ They would like to allow this new member to:
 However, the new team member should not be allowed to change anything else in AAP for now.
 Sounds like a job for Automation Execution **Surveys** and Ansible Automation Platform **Role Based Access Control**!
 
+IMPORTANT: If you've _skipped_ any of the previous chapters, call `cd ~/playbooks-adv-controller && ansible-navigator run add-workflow-template.yml` in a terminal to set the pre-requisites for the next steps.
+
 == Add the survey
 
 Surveys allow to define the content of variables before running a job.
@@ -73,7 +75,7 @@ You can verify that no built-in role allows to execute _and_ approve a workflow,
 To do so, click on the small arrow head next to the tick box on the left of each role to drop down the actual permissions.
 
 .Filter Workflow roles
-image::role-workflow-filter.png[Filter Workflow roles,link=self,window=blank]
+image::role-workflow-filter.drawio.png[Filter Workflow roles,link=self,window=blank]
 
 The Night Shift personal though is alone at night and they need to be able to circumvent approval steps or they might not be able to do their job.
 
@@ -85,7 +87,7 @@ So we decide to create our own role for them:
 
 * Click on the blue **Create role** button (potentially hidden behind a 3 dots menu), and enter:
 ** **Name:** WorkflowNightShifter
-** **Desscription:** Nightshift workflow
+** **Description:** Nightshift workflow
 ** **Resource type:** Workflow job template
 ** **Permissions:** (select the following ones)
 *** [x] Can approve steps in this workflow job template
@@ -155,7 +157,6 @@ Add the permission to use the template:
 ** Click **Next**
 ** Choose the role `WorkflowNightShifter`
 . Click **Next**, review and **Finish**
-. A short progress dialog appears, click **Close**
 
 If you go to **Automation Execution ⇒ Templates**, open the `Deploy Webapplication` workflow, and go to the **Team Access** tab, you'll see an overview of all RBAC entries.
 
