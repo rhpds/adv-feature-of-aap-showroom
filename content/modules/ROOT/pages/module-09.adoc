@@ -1,0 +1,183 @@
+= Policy Enforcement
+
+This chapter explores Ansible Automation Platform Policy Enforcement — the practice of using programmatic guardrails to ensure automation remains compliant, secure, and predictable. While standard automation focuses on how to perform a task, policy enforcement focuses on whether that task should be allowed to run based on real-time environmental context.
+
+[TIP]
+====
+**Enforce policies to keep AI in check**
+We are entering the era of AIOps, this basically means infusing AI inferences into automated IT actions. You need to ensure that your AI-driven automation will function within the boundaries of internal and external policies. With Ansible Automation Platform, you can enforce policies at automation runtime to ensure every AIOps action aligns with intended outcomes. 
+====
+
+== Policy Enforcement in AAP
+
+Ready to give this feature a try? This is your setup:
+
+** On your bastion host a Open Policy Agent (OPA) server runs as a Podman container
+** You need to create policies and make them available to the OPA server
+** You can then configure Automation Controller to validate actions before a Job Template is run
+
+[WARNING]
+====
+We are running the OPA server here with no authentication, no TLS/HTTPS and no access controls. This is obviously only suitable for this lab, for using OPA in production your setup has to be more involved.
+====
+
+The flow when using Policy Enforcement is this:
+
+* **Job Request**: A user triggers a Job Template or an API call starts an automation task.
+* **Policy Check**: Before the playbook starts, the Automation Controller sends the job's metadata (who is running it, what inventory is targeted, what variables are being used) to the Policy Engine (OPA).
+* **Evaluation**: The engine compares the request against Rego policies (the language used by OPA).
+* **Decision**: `Allow: true` the job proceeds to execution. `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
+
+So we basically have 
+
+* **Input**: Automation Controller packages the context of a request into a JSON object and sends it to OPA. 
+* **The Policy**: Inside OPA, you have Rego files. These files act on the input data. OPA looks at the JSON above and runs it against a rule like: “If the user is not in the 'Cloud_Admins' group, they cannot request an instance larger than 't3.medium'.”
+* **Output**: `Allow: true` (The job starts immediately), `Allow: false` (The job is killed, and the platform logs a violation).
+
+As always it's better to see this in action, so let's get started!
+
+The first step are the rego policies. We did prepare a number of policies for you to get started, clone the repo to your bastion host and copy the policies to the OPA server policy directory:
+
+In your VS Code terminal (or SSH session) run:
+
+[source,shell,role=execute,subs="attributes"]
+----
+cd
+git clone {gitea_url}/{gitea_username}/opa-policy-enforcement.git
+cp opa-policy-enforcement/* /var/lib/opa/policies/
+----
+
+Copying the policies to the policy directory of the OPA server makes them available immediately. 
+
+== Configuring AAP for Policy Enforcement
+
+The first step for enabling Policy Enforcement in AAP is to configure the OPA Server. In this lab this has already been done for you, have a look at menu:Settings[Automation Execution > Policy]:
+
+image::opa-server.png[800,600,link=self,window=blank]
+
+== Add Policy Enforcement to a Job Template
+
+Before configuring a policy, let's have a look at the policy `deny.rego` which is very simple and just returns an `allowed: false` as a result, basically denying all requests to OPA:
+
+[source,yaml,subs="attributes"]
+----
+package deny_policy
+
+import rego.v1
+
+deny := { 
+  "allowed": false,
+  "violations": ["No job execution is allowed"]
+----
+
+[TIP]
+====
+We will not go into the intricacies of the rego language here. Writing more involved policies is not easy, no sugar-coating here. **But** there are a lot of resources and examples to help you get started, we'll list some at the end of the chapter. As a tip the AI-coding assistants are pretty good with this, e.g. `extra_vars.rego` was created with the help of Cursor.
+====
+
+To actually use policies in Automation Execution you have to configure Policy Enforcement on one of the three objects **Job Template**, **Inventory** or **Organization**.
+
+To keep it easy for now let's just configure the `deny` policy for the `Demo Job Template`:
+
+** Go to menu:Settings[Automation Execution > Templates] and click the pencil icon on the **Demo Job Template** to edit it
+** Set the field **Policy enforcement** to `deny_policy/deny`
+** Click **Save job template**
+
+Now go ahead and launch the Job Template. It should return
+
+[source,subs="attributes"]
+----
+This job cannot be executed due to a policy violation or error. See the following details:
+{'Violations': {'Job template': ['No job execution is allowed']}}
+----
+
+No surprises here... the Template execution is not allowed and the message is the reason for the violation returned in the OPA result message.
+
+Let's try to do something more meaningful (I mean denying everything is not particular helpful... ;-). The second Policy looks like this:
+
+[source,yaml,subs="attributes"]
+----
+package aap.policies
+
+# =============================================================================
+# EDIT THIS SECTION FOR THE LAB (allow-lists)
+# =============================================================================
+
+allowed_keys := {
+	"environment",
+	"color",
+}
+
+ok_environment := {"dev", "prod"}
+
+ok_color := {"blue", "green"}
+
+# =============================================================================
+# Policy logic (usually leave as-is)
+# =============================================================================
+
+violations := array.concat(
+	array.concat(
+		[sprintf("Key %q is not allowed. Add it to allowed_keys if it should be permitted.", [k]) |
+			some k
+			ev := object.get(input, "extra_vars", {})
+			ev[k]
+			not allowed_keys[k]
+		],
+		[sprintf("For key \"environment\", use one of %v — you sent %v.", [ok_environment, v]) |
+			ev := object.get(input, "extra_vars", {})
+			ev["environment"]
+			v := ev["environment"]
+			not ok_environment[v]
+		],
+	),
+	[sprintf("For key \"color\", use one of %v — you sent %v.", [ok_color, v]) |
+		ev := object.get(input, "extra_vars", {})
+		ev["color"]
+		v := ev["color"]
+		not ok_color[v]
+	],
+)
+
+allowed := count(violations) == 0
+----
+
+This policy reads the `extra_vars` that might be configured in the Job Template from the JSON input passed by Automation Controller. It will
+
+** Check for allowed keys
+** Check for allowed values for the keys
+
+If the input doesn't match the allowed input it will deny the Template run. Let's put this to the test:
+
+** Again open the Demo job Template for editing
+** Change the field **Policy enforcement** to `aap/policies`
+** In the field **Extra variables**: `color: red`
+** **Save job template**
+
+What do you think will happen? Launch the Job Template and let's see... 
+
+[source,subs="attributes"]
+----
+This job cannot be executed due to a policy violation or error. See the following details:
+{'Violations': {'Job template': ['For key "color", use one of {"blue", '
+'"green"} — you sent red.']}}
+----
+
+As to be expected from the policy, the key `color` is accepted, but the value `red` is not, so execution is denied. Open the Job Template again and change the value to `blue` or `green` and launch the template again.
+
+This should now result in the template being executed, you won't see any hints in the output that it was checked against a policy. This is because the policy enforcement happens outside Automation controller and the automation content by design.
+
+You can now play around with the **Extra variables** of the **Job Template**, e.g. set them to the values below and see what happens:
+
+----
+color: blue
+environment: test
+----
+
+== Conclusion
+
+This chapter was meant to provide a brief introduction to Policy Enforcememnt in AAP. To help you get started with creating rego policies, here a some pointers to more information:
+
+* link:https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/html/configuring_automation_execution/controller-pac[AAP Documentation: Implementing policy enforcement]
+* link:https://autodotes.com/posts/muid7W8FhABshWX1zwDS[Blog Post: Getting Started with Policy Enforcement for Ansible Automation Platform]
+* link:https://play.openpolicyagent.org/[Rego Playground for testing Rego Policies]

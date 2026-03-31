@@ -1,0 +1,3 @@
+= The new Self-Service Portal
+
+Project signing allows users to sign content like playbooks, inventories, etc that live in a project (backed by a version control repository) and configure automation controller to verify whether or not that content has been changed form the signed versions. This way users can make sure the supply chain remains untampered, from the source repository to running an automation job.
