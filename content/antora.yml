@@ -33,3 +33,4 @@ asciidoc:
     user: "MYUSER"
     vscode_server_password: "MYVSCODEPASSWORD"
     vscode_server_url: "https://MYVSCODEHOST.apps.ocpvdev01.rhdp.net"
+    ssp-url: "https://MYSSPHOST.apps.ocpvdev01.rhdp.net"

@@ -1,7 +1,8 @@
 * xref:index.adoc[**Lab introduction**]
-* **Intermediate**
+* **Base**
 ** xref:module-01.adoc[1. Introduction to Unified UI]
 ** xref:module-02.adoc[2. Configure resources with Ansible]
+* **Intermediate**
 ** xref:module-03.adoc[3. Workflows for more efficient collaboration]
 ** xref:module-04.adoc[4. Surveys and the revamped access rights]
 ** xref:module-05.adoc[5. Use dynamic inventories to scale your automation]
@@ -12,4 +13,5 @@
 ** xref:module-09.adoc[9. Policy Enforcement]
 * **The End**
 ** xref:the-end.adoc[Before you leave!]
+* **Additional Information**
 ** xref:lab-access.adoc[Lab Access]
