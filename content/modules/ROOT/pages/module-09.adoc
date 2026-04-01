@@ -32,11 +32,6 @@ The flow when using Policy Enforcement is this:
 * **Evaluation**: The engine compares the request against Rego policies (the language used by OPA).
 * **Decision**: If the decision is `Allow: true`, the job proceeds to execution. But with `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
 
-So we basically have 
-
-* **Input**: Automation Controller packages the context of a request into a JSON object and sends it to OPA. 
-* **The Policy**: Inside OPA, you have Rego files. These files act on the input data. OPA looks at the JSON above and runs it against a rule like: “If the user is not in the 'Cloud_Admins' group, they cannot request an instance larger than 't3.medium'.”
-* **Output**: `Allow: true` (The job starts immediately), `Allow: false` (The job is killed, and the platform logs a violation).
 
 As always it's better to see this in action, so let's get started!
 
