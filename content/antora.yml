@@ -1,5 +1,5 @@
 name: modules
-title: LB1347 - Advanced Features of Ansible Automation Platform - Automation Controller
+title: LB1347 - Advanced Features of Ansible Automation Platform
 version: ~
 start_page: index.adoc
 nav:
@@ -33,3 +33,4 @@ asciidoc:
     user: "MYUSER"
     vscode_server_password: "MYVSCODEPASSWORD"
     vscode_server_url: "https://MYVSCODEHOST.apps.ocpvdev01.rhdp.net"
+    ssap_url: "https://MYSSAPHOST.apps.ocpvdev01.rhdp.net"

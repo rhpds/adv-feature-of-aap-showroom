@@ -1,6 +1,6 @@
 ---
 site:
-  title: LB1347 - Advanced Features of Ansible Automation Platform - Automation Controller
+  title: LB1347 - Advanced Features of Ansible Automation Platform
   url: https://github.com/rhpds/adv-feature-of-aap-showroom
   start_page: modules::index.adoc
 
