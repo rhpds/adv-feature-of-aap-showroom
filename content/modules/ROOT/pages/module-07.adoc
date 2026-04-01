@@ -329,7 +329,7 @@ Above tasks indicate that the signature validation was successful.
 
 The last step in this lab is to check, if automation controller picks up if the content has been changed without re-signing it, indicating somebody has tampered with the content.
 
-Open the file `/home/{bastion_ssh_user_name}/{gitea_controller_project}/apache_install.yml` in your VS Code and change something, like set `enabled: false`.
+Open the file `/home/{ssh_username}/{gitea_controller_project}/apache_install.yml` in your VS Code and change something, like set `enabled: false`.
 
 Push the new version to the Git repository:
 
