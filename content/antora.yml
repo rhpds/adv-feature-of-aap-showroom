@@ -12,10 +12,9 @@ asciidoc:
     gitea_controller_project: playbooks-adv-controller
     ee_supported_image: ee-supported-rhel9:latest
     # placeholders for attributes overwritten by the lab
+    automation_hub_hostname: "MYHUB.apps.ocpvdev01.rhdp.net"
     bastion_public_hostname: "MYBASTION.apps.ocpvdev01.rhdp.net"
     bastion_ssh_password: "MYBASTIONSSHPASSWORD"
-    bastion_ssh_port: "MYBASTIONSSHPORT"
-    bastion_ssh_user_name: "MYBASTIONSSHUSER"
     common_password: "MYCOMMONPASSWORD"
     controller_password: "MYCTLPASSWORD"
     controller_url: "https://MYCTLHOST.apps.ocpvdev01.rhdp.net"
