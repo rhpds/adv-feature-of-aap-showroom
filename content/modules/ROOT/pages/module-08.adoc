@@ -1,18 +1,23 @@
-= The new Self-Service Portal (SSP)
+= The new Self-Service Automation Portal (SSAP)
 
-Starting with version 2.6, Ansible Automation Platform includes a brand new self-service portal based on Red Hat Developer Hub/Backstage. At first only available to run on Red Hat OpenShift, it will be available as a Red Hat Enterprise Linux-based appliance, too. 
+Starting with version 2.6, Ansible Automation Platform includes a brand new https://www.redhat.com/en/technologies/management/ansible/self-service-automation[self-service portal] based on https://www.redhat.com/en/technologies/cloud-computing/developer-hub[Red Hat Developer Hub]/https://backstage.io/[Backstage].
+At first only available to run on Red Hat OpenShift, it will be available as a Red Hat Enterprise Linux-based appliance, too. 
 
-The General Availabilty is planned around Summit 2026 timeframe. But since we wanted to give you a sneak peak into it already, we included a lab chapter based on the Developer Preview version.
+The General Availability is planned around Summit 2026 time frame.
+But since we wanted to give you a sneak peak into it already, we included a lab chapter based on the Developer Preview version.
 
 == The AAP Self-Service Portal
 
-The Self-service automation portal makes enterprise automation accessible to users of varying roles and skill levels through a simplified web interface designed for business users, not automation experts. Instead of requiring users to understand what's going on under the hood, self-service automation portal provides a streamlined "point-and-click" experience.
+The self-service automation portal makes enterprise automation accessible to users of varying roles and skill levels through a simplified web interface designed for business users, not automation experts.
+Instead of requiring users to understand what's going on under the hood, SSAP provides a streamlined "point-and-click" experience.
 
 Self-service automation portal uses your existing Ansible Automation Platform setup: it uses the same logins, same security controls, and the same automation logic.
 
-== Configuring and Accessing SSP
+== Configuring and Accessing SSAP
 
-Using the SSP RHEL appliance, administrators will have to configure it and set up tokens and OAuth in Ansible Automation Platform. Most of this work has been done for you in this lab, only a few steps are required. First check that the OAuth application has been configured, this is needed because SSP uses AAP for authentication.
+Using the SSAP RHEL appliance, administrators will have to configure it and set up tokens and OAuth in Ansible Automation Platform.
+Most of this work has been done for you in this lab, only a few steps are required.
+First check that the OAuth application has been configured, this is needed because SSAP uses AAP for authentication.
 
 Access your AAP UI using the Showroom tab or by opening it in a browser tab {controller_url}[window=blank]. From there:
 
@@ -22,35 +27,38 @@ Access your AAP UI using the Showroom tab or by opening it in a browser tab {con
 
 image::oauth-app.png[800,600,link=self,window=blank]
 
-In the next step, from a terminal as user `lab-user` access the SSP appliance:
+In the next step, from a terminal as user `lab-user` access the SSAP appliance:
 
 ----
 ssh ssap
 ----
 
-** The SSP appliance is configured using a text-based user interface
+** The SSAP appliance is configured using a text-based user interface
 ** The configuration has already been created and just needs to be activated using the config tool
 ** Run:
-
++
+[source,shell]
 ----
 sudo portal-setup -c /tmp/portal.env
 ----
 
 ** Answer the first dialog **Would you like to reconfigure** with `Yes` by hitting the Enter key
-** Go through the prompts and answer `OK` to all of them **until you get to Registry Authentication** and the question **Would you like to update the credentials?**
-** Answer `No` (move the highlighted answer to `No` with the cursor/arrow button)
+** Then select to **Review** the entered values
+** Go through the prompts and answer `OK` to all of them **UNTIL** you get to **Registry Authentication** and the question **Would you like to update the credentials?**
+** **THEN** answer `No` (move the highlighted answer to `No` with the cursor/arrow button)
 ** For the next questions keep on answering `OK` until you can finally hit `Yes`
 
-Configuring the Portal will take a couple of minutes. When you are finally greeted with this screen, your Self-Serive Portal is ready to go:
+Configuring the Portal will take a couple of minutes.
+When you are finally greeted with this screen, your Self-Service Portal is ready to go:
 
 image::ssp-ready.png[800,600,link=self,window=blank]
 
 Access the SSP UI:
 
-** **Open an Incognito Window in your browser** because we need to log in as admin, not lab-user
-** Go to {ssp-url}, you will be asked to sign in using Ansible Automation Platform
+** **Open an Incognito (Chrome) or Private (Firefox) Window in your browser** because we need to log in as admin, not lab-user
+** Go to {ssap_url}, you will be asked to sign in using Ansible Automation Platform
 ** Click **Sign In**
-** You will be directed to AAP, log in as user `admin` with password `ansible123!`
+** You will be directed to AAP, log in as user `admin` with the password provided during the lab
 ** Click **Authorize** for Read and Write access
 
 You will be greeted by the shiny new SSP Portal! Since you are the admin user, you will see all **Job Templates** configured. For the fun of it start the **Demo Job Template** and enjoy the show.
