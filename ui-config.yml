@@ -1,4 +1,6 @@
 ---
+#----This entire block should be defined in AgV when using these variables.--------------
+
 type: zero-touch
 
 # Set the left column width to 30%
@@ -22,7 +24,6 @@ tabs:
     url: '{gitea_url}'
   - name: OPA
     url: "{opa_web_url}"
-
 antora:
   name: modules
   dir: www
@@ -75,3 +76,4 @@ antora:
       label: "The End"
       scripts: []
       solveButton: false
+#-----------------------------------------------------------------------------------------
