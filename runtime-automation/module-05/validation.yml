@@ -1,0 +1,13 @@
+---
+- name: Validate Module N
+  hosts: bastion
+  gather_facts: false
+  become: true
+  vars:
+    ansible_user: "{{ bastion_user | default('lab-user') }}"
+  tasks:
+    - name: Placeholder validation
+      validation_check:
+        check: true
+        pass_msg: "✅ Validation logic goes here"
+        error_msg: "❌ Not implemented yet"
