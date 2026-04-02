@@ -11,20 +11,30 @@ view_switcher:
   default_mode: split
 
 tabs:
+  - name: '@Codeserver'
+    url: '{vscode_server_url}'
   - name: '>_Terminal'
     path: /wetty
     port: 443
-  - name: '@Codeserver'
-    url: '{vscode_server_url}'
   - name: AAP
     url: '{controller_url}'
   - name: Gitea
     url: '{gitea_url}'
+  - name: OPA
+    url: "{opa_web_url}"
 
 antora:
   name: modules
   dir: www
   modules:
+    - name: index
+      label: "Lab introduction"
+      scripts: []
+      solveButton: false
+    - name: lab-access
+      label: "Lab Access Details"
+      scripts: []
+      solveButton: false
     - name: module-01
       label: "Module 1: Introduction to Unified UI"
       scripts: [solve, validation]
@@ -61,3 +71,7 @@ antora:
       label: "Module 9: Policy Enforcement"
       scripts: [solve, validation]
       solveButton: true
+    - name: the-end
+      label: "The End"
+      scripts: []
+      solveButton: false
