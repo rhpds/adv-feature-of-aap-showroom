@@ -6,6 +6,8 @@ You might remember the concept of Smart Inventories. They allowed us to create i
 
 Therefore, the concept of smart inventories, although still available in automation execution, is deprecated and replaced by constructed inventories. They are far more flexible and of course, they maintain the group membership information of your hosts.
 
+IMPORTANT: If you've _skipped_ any of the previous chapters, call `cd ~/playbooks-adv-controller && ansible-navigator run add-dyn-inventory.yml` in a terminal to set the pre-requisites for the next steps.
+
 == Create a basis
 
 Let's create our first constructed inventory by navigating to the **Automation Execution** ⇒ **Infrastructure** ⇒ **Inventories** section in the main menu on the left.
@@ -38,7 +40,7 @@ The first line informs the automation execution that we want to use the construc
 Now while in the details view of the `Constructed Inventory`:
 
 . Click the "Sync inventory" button.
-. After the sync has finished, have a look at the **Hosts** tab in the "Constructed inventory"
+. After the sync has finished, have a look at the **Hosts** tab in the "Constructed inventory".
 You should see all hosts from the `Cloud inventory` and the `Lab inventory` combined.
 . In the *Groups* tab you should also see a group called *dyngroup* which was imported from our dynamic inventory `Cloud inventory`.
 
@@ -56,8 +58,6 @@ strict: false
 compose:
   ansible_host: inventory_hostname | lower()
 ----
-
-TIP: Press Ctrl+Enter in the Source variables field to add a new line.
 
 NOTE: When connecting to a remote host Ansible is using the `ansible_host` variable - this is different from the `inventory_hostname` which is what we for example see in the UI when we click on *Hosts*.
 
