@@ -22,7 +22,7 @@ Ready to give this feature a try? This is your setup:
 ====
 We are running the OPA server here with no authentication, no TLS/HTTPS and no access controls.
 This is obviously only suitable for this lab, for using OPA in production your setup has to be more involved.
-You will need anyway to provide your own OPA server anyway as it isn't a part of AAP.
+And note you have to provide your own OPA server anyway as it isn't part of AAP.
 ====
 
 The flow when using Policy Enforcement is this:
@@ -33,7 +33,7 @@ The flow when using Policy Enforcement is this:
 * **Decision**: If the decision is `Allow: true`, the job proceeds to execution. But with `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
 
 
-As always it's better to see this in action, so let's get started!
+As always it's better to see this in action, so let's get started! If you haven't already, log in to Codeserver (password **{controller_password}**.) and AAP (user **lab-user**, password **{controller_password}**).
 
 The first step are the rego policies. We did prepare a number of policies for you to get started, clone the repo to your bastion host and copy the policies to the OPA server policy directory:
 
@@ -60,7 +60,7 @@ Before configuring a policy, let's have a look at the policy `deny.rego` which i
 
 [source,rego]
 ----
-package deny_policy
+package aap.deny
 
 import rego.v1
 
@@ -80,7 +80,7 @@ To actually use policies in Automation Execution you have to configure Policy En
 To keep it easy for now let's just configure the `deny` policy for the `Demo Job Template`:
 
 ** Go to menu:Automation Execution[Templates] and click the pencil icon on the **Demo Job Template** to edit it
-** Set the field **Policy enforcement** to `deny_policy/deny`
+** Set the field **Policy enforcement** to `aap/deny`
 ** Click **Save job template**
 
 Now go ahead and launch the Job Template. It should return
@@ -93,11 +93,13 @@ This job cannot be executed due to a policy violation or error. See the followin
 
 No surprises here... the Template execution is not allowed and the message is the reason for the violation returned in the OPA result message.
 
+== Check Extra Vars Policy
+
 Let's try to do something more meaningful (I mean denying everything is not particular helpful... ;-). The second Policy looks like this:
 
 [source,rego,subs="attributes"]
 ----
-package aap.policies
+package aap.extravars
 
 # =============================================================================
 # EDIT THIS SECTION FOR THE LAB (allow-lists)
@@ -147,12 +149,16 @@ This policy reads the `extra_vars` that might be configured in the Job Template 
 ** Check for allowed keys
 ** Check for allowed values for the keys
 
+=== Configure the Policy
+
 If the input doesn't match the allowed input it will deny the Template run. Let's put this to the test:
 
 ** Again open the **Demo Job Template** for editing
-** Change the field **Policy enforcement** to `aap/policies`
+** Change the field **Policy enforcement** to `aap/extravars`
 ** In the field **Extra variables**: `color: red`
 ** **Save job template**
+
+=== Test the Policy
 
 What do you think will happen? Launch the Job Template and let's see... 
 
@@ -174,9 +180,89 @@ color: blue
 environment: test
 ----
 
+== Maintenance Window Policy
+
+Here is another real-world example dealing with maintenance windows. Companies often have a certain time window where system maintenance like updates can happen. To make sure no conflicting automation is running, e.g. reconfiguration of an application, it would be very helpful to not allow running automation jobs other then the ones needed for maintenance. 
+
+Here our policy `maintenance_window.rego` comes to the rescue:
+
+** It checks if the current time is inside a given start and end time, this is the maintenance window
+** Allows execution of Job Templates in the specified time window only when it has the label `maintenance`.
+** Doesn't allow the execution of Job Templates with the label `maintenance` outside the maintenance window
+
+=== Configure the Policy
+
+The policy file has alread been copied to the policy directory. To make sure the current time is inside the time window specified:
+
+** Find the current time in UTC by running `date -u` in your terminal 
+** Open the `/var/lib/opa/policies/maintenance_window.rego` in the VS Code editor or your favorite editor
+** Find the block with the time specs:
+
+[source,subs="attributes"]
+----
+# Window is [start, end) — includes start, excludes end (02:00–04:00 means 02:00 up to 03:59:59)
+window_start_hour := 9 
+window_start_minute := 0
+window_end_hour := 11 
+window_end_minute := 0
+----
+
+Take the output of the `date` command and define a time window where it would fall into. E.g. if your current time was `Tue Apr 7 12:52:38 UTC 2026`, the time window could be 12-14, resulting in this:
+
+[source,subs="attributes"]
+----
+# Window is [start, end) — includes start, excludes end (02:00–04:00 means 02:00 up to 03:59:59)
+window_start_hour := 12 
+window_start_minute := 0
+window_end_hour := 14 
+window_end_minute := 0
+----
+
+Save the file. Now head over to AAP and configure it, we'll use the Demo Job Template again:
+
+** Open the **Demo Job Template** for editing
+** Change the field **Policy enforcement** to `aap/maintenance`
+** Find the field **Labels**, type `maintenance` into it and hit **Enter**
+** **Save job template**
+
+== Testing the Policy
+
+To test your configuration, launch the job.
+
+Since you have configured the current time to be inside our maintenance window and the Job Template has the label maintenance, the Job will just run.
+
+In the next step , remove the label again:
+
+** Open the **Demo Job Template** for editing
+** In the field **Labels**, hit the x on the label `maintenance` to remove it
+** **Save job template**
+
+You will be greeted by a policy violation:
+
+----
+This job cannot be executed due to a policy violation or error. See the following details:
+{'Violations': {'Job template': ['Between 12:00 and 14:00 (UTC) only jobs with '
+'label "maintenance" may run.']}}
+----
+
+Now:
+
+** Change the time window again so the current time is **not** inside the window
+** Add the `maintenance` label to the Job Template again
+
+When the Job Template is launched, you will get a policy violation again:
+
+----
+This job cannot be executed due to a policy violation or error. See the following details:
+{'Violations': {'Job template': ['Jobs with label "maintenance" may only run '
+'between 01:00 and 02:00 (UTC).']}}
+----
+
+As expected the maintenance Job is not allowed to run outside the maintenance window. 
+
 == Conclusion
 
-This chapter was meant to provide a brief introduction to Policy Enforcememnt in AAP. To help you get started with creating rego policies, here a some pointers to more information:
+This chapter was meant to provide a brief introduction to Policy Enforcement in AAP. To help you get started with creating rego policies, here a some pointers to more information:
 
 * link:https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/html/configuring_automation_execution/controller-pac[AAP Documentation: Implementing policy enforcement,window=blank]
 * link:https://autodotes.com/posts/muid7W8FhABshWX1zwDS[Blog Post: Getting Started with Policy Enforcement for Ansible Automation Platform,window=blank]
