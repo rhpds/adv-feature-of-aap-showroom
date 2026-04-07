@@ -1,7 +1,7 @@
 = The new Self-Service Automation Portal (SSAP)
 
-Starting with version 2.6, Ansible Automation Platform includes a brand new https://www.redhat.com/en/technologies/management/ansible/self-service-automation[self-service portal] based on https://www.redhat.com/en/technologies/cloud-computing/developer-hub[Red Hat Developer Hub]/https://backstage.io/[Backstage].
-At first only available to run on Red Hat OpenShift, it will be available as a Red Hat Enterprise Linux-based appliance, too. 
+Starting with version 2.6, Ansible Automation Platform includes a brand new https://www.redhat.com/en/technologies/management/ansible/self-service-automation[self-service portal] based on https://www.redhat.com/en/technologies/cloud-computing/developer-hub[Red Hat Developer Hub] / https://backstage.io/[Backstage].
+At first only available to run on Red Hat OpenShift, it is available as a Red Hat Enterprise Linux-based appliance, too. 
 
 The General Availability is planned around Summit 2026 time frame.
 But since we wanted to give you a sneak peak into it already, we included a lab chapter based on the Developer Preview version.
@@ -19,7 +19,7 @@ Using the SSAP RHEL appliance, administrators will have to configure it and set 
 Most of this work has been done for you in this lab, only a few steps are required.
 First check that the OAuth application has been configured, this is needed because SSAP uses AAP for authentication.
 
-Access your AAP UI using the Showroom tab or by opening it in a browser tab {controller_url}[window=blank]. From there:
+Access your AAP UI using the Showroom tab or by opening it in a browser tab {controller_url}[window=blank]. Login as user **lab-user** with the password **{controller_password}**. From there:
 
 ** Go to menu:Access Management[OAuth Applications]
 ** Open the OAuth application called `Selfservice-*****`
@@ -30,13 +30,13 @@ image::oauth-app.png[800,600,link=self,window=blank]
 You'll need to create a team called `aap-admins` belonging to the `Default` organization.
 
 . Go to menu:Access Management[Teams]
-. Press the blue btn:[&#x2295; Create team]
+. Press the blue button: **Create team**
 . Enter:
 ** **Name:** aap-admins
 ** **Organization:** Default
-. Press the blue btn:[Create team]
+. Press the blue button: **Create team**
 
-We could create and add users to this new team but {controller_username} as system administrator is already implicitly member of the team (go to menu:Access Management[Users > {controller_username} > Teams] if you don't believe it).
+We could create and add users to this new team but {controller_username} as system administrator is already implicitly member of the team (have a look at menu:Access Management[Users > {controller_username} > Teams]).
 
 == Configuring and Accessing SSAP
 
@@ -63,9 +63,9 @@ image::ssp-ready.png[800,600,link=self,window=blank]
 Access the SSP UI:
 
 ** Go to {ssap_url}[window=blank], you will be asked to sign in using Ansible Automation Platform
-** Click btn:[Sign In]
+** Click the button: **Sign In**
 ** You will be directed to AAP, log in as usual if you're not already
-** Click btn:[Authorize] for Read and Write scope access
+** Click: **Authorize** for Read and Write scope access
 
 You will be greeted by the shiny new SSP Portal! Since you are an admin user, you will see all **Job Templates** configured, but because you are not _the_ `admin` user, you can't do anything with it.
 Let's correct this!
@@ -76,16 +76,16 @@ In a real world, you would give mostly others access to the portal.
 For sake of simplicity, we will give ourselves access rights to the templates, and the right to synchronize with AAP.
 
 . Select the lower left entry menu:Administration[RBAC].
-. Click in the upper right corner btn:[Create] to... create a new role
-. Enter the **Name**: ssap_operators and click btn:[Next]
-. Select the 'AAP Administrators' (you're one of them) and click btn:[Next]
-. Select the 'Catalog' and 'Scaffolder' plugins, and select all permissions under each plugin.
+. Click in the upper right corner **Create** to... create a new role
+. Enter the **Name**: ssap_operators and click **Next**
+. Select the `AAP Administrators` (you're one of them) and click btn:[Next]
+. Select the `Catalog` and `Scaffolder` plugins, and select all permissions under each plugin.
   The result should look as follows.
-  When done, press btn:[Next].
+  When done, press **Next**.
 +
 image::ssap_permissions.png[link=self,window=blank]
 
-. Finally, press btn:[Create].
+. Finally, press **Create**.
 
 Now, going back to the menu:Templates[] menu, you'll see that you can:
 
@@ -98,13 +98,13 @@ B. Start the templates already available _if_ your user has this right in AAP as
 
 . Go to AAP, login if necessary
 . Select menu:Automation Execution[Templates]
-. Edit the 'Demo Job Template'
+. Edit the `Demo Job Template`
 . Enter a menu:Description[] like 'Say hello to the world'
-. Press btn:[Save job template]
+. Press **Save job template**
 . Go back to the portal
 . Click on [.underline]#Sync now# in the upper left corner
-. Selecting the 'Job templates' is sufficient, then press btn:[Ok]
-. Refresh the browser page (press kbd:[F5] for example)
+. Selecting the **Job templates** is sufficient, then press **Ok**
+. Refresh the browser page
 
 You should now see your new fancy description.
 
@@ -113,10 +113,10 @@ You should now see your new fancy description.
 Now that you know what the job template is supposed to do, you can use it.
 As it's the purpose of the portal, it's super simple to do:
 
-. Click btn:[Start].
-. While the job runs, you can btn:[Cancel] it.
-. You can also use btn:[Show Logs] to get a simplified version of the job log you know from AAP.
-. And once the job is finished, you can restart it with btn:[Start Over].
+. Click **Start**.
+. While the job runs, you can **Cancel** it.
+. You can also use **Show Logs** to get a simplified version of the job log you know from AAP.
+. And once the job is finished, you can restart it with **Start Over**.
 
 == Conclusion
 
