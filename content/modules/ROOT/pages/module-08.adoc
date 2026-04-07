@@ -13,7 +13,7 @@ Instead of requiring users to understand what's going on under the hood, SSAP pr
 
 Self-service automation portal uses your existing Ansible Automation Platform setup: it uses the same logins, same security controls, and the same automation logic.
 
-== Configuring and Accessing SSAP
+== Preparing AAP
 
 Using the SSAP RHEL appliance, administrators will have to configure it and set up tokens and OAuth in Ansible Automation Platform.
 Most of this work has been done for you in this lab, only a few steps are required.
@@ -27,6 +27,19 @@ Access your AAP UI using the Showroom tab or by opening it in a browser tab {con
 
 image::oauth-app.png[800,600,link=self,window=blank]
 
+You'll need to create a team called `aap-admins` belonging to the `Default` organization.
+
+. Go to menu:Access Management[Teams]
+. Press the blue btn:[&#x2295; Create team]
+. Enter:
+** **Name:** aap-admins
+** **Organization:** Default
+. Press the blue btn:[Create team]
+
+We could create and add users to this new team but {controller_username} as system administrator is already implicitly member of the team (go to menu:Access Management[Users > {controller_username} > Teams] if you don't believe it).
+
+== Configuring and Accessing SSAP
+
 In the next step, from a terminal as user `lab-user` access the SSAP appliance:
 
 ----
@@ -39,14 +52,8 @@ ssh ssap
 +
 [source,shell]
 ----
-sudo portal-setup -c /tmp/portal.env
+sudo portal-setup -c /tmp/portal.env -y
 ----
-
-** Answer the first dialog **Would you like to reconfigure** with `Yes` by hitting the Enter key
-** Then select to **Review** the entered values
-** Go through the prompts and answer `OK` to all of them **UNTIL** you get to **Registry Authentication** and the question **Would you like to update the credentials?**
-** **THEN** answer `No` (move the highlighted answer to `No` with the cursor/arrow button)
-** For the next questions keep on answering `OK` until you can finally hit `Yes`
 
 Configuring the Portal will take a couple of minutes.
 When you are finally greeted with this screen, your Self-Service Portal is ready to go:
@@ -55,23 +62,66 @@ image::ssp-ready.png[800,600,link=self,window=blank]
 
 Access the SSP UI:
 
-** **Open an Incognito (Chrome) or Private (Firefox) Window in your browser** because we need to log in as admin, not lab-user
-** Go to {ssap_url}, you will be asked to sign in using Ansible Automation Platform
-** Click **Sign In**
-** You will be directed to AAP, log in as user `admin` with the password provided during the lab
-** Click **Authorize** for Read and Write access
+** Go to {ssap_url}[window=blank], you will be asked to sign in using Ansible Automation Platform
+** Click btn:[Sign In]
+** You will be directed to AAP, log in as usual if you're not already
+** Click btn:[Authorize] for Read and Write scope access
 
-You will be greeted by the shiny new SSP Portal! Since you are the admin user, you will see all **Job Templates** configured. For the fun of it start the **Demo Job Template** and enjoy the show.
+You will be greeted by the shiny new SSP Portal! Since you are an admin user, you will see all **Job Templates** configured, but because you are not _the_ `admin` user, you can't do anything with it.
+Let's correct this!
+
+== Role Based Access Control
+
+In a real world, you would give mostly others access to the portal.
+For sake of simplicity, we will give ourselves access rights to the templates, and the right to synchronize with AAP.
+
+. Select the lower left entry menu:Administration[RBAC].
+. Click in the upper right corner btn:[Create] to... create a new role
+. Enter the **Name**: ssap_operators and click btn:[Next]
+. Select the 'AAP Administrators' (you're one of them) and click btn:[Next]
+. Select the 'Catalog' and 'Scaffolder' plugins, and select all permissions under each plugin.
+  The result should look as follows.
+  When done, press btn:[Next].
++
+image::ssap_permissions.png[link=self,window=blank]
+
+. Finally, press btn:[Create].
+
+Now, going back to the menu:Templates[] menu, you'll see that you can:
+
+A. Sync the templates to get modified and new ones from AAP
+B. Start the templates already available _if_ your user has this right in AAP as well
 
 == Self-Service Portal synchronization with AAP
 
-Self-service automation portal synchronizes two types of objects from Ansible Automation Platform:
+"No description available" as template description isn't a great fit so let's fix this:
 
-** Organizations, Users, and Teams
-** Job Templates
+. Go to AAP, login if necessary
+. Select menu:Automation Execution[Templates]
+. Edit the 'Demo Job Template'
+. Enter a menu:Description[] like 'Say hello to the world'
+. Press btn:[Save job template]
+. Go back to the portal
+. Click on [.underline]#Sync now# in the upper left corner
+. Selecting the 'Job templates' is sufficient, then press btn:[Ok]
+. Refresh the browser page (press kbd:[F5] for example)
 
-Synchronizations run either on a schedule or can be triggered  manually.
+You should now see your new fancy description.
 
+== Execute a job
 
+Now that you know what the job template is supposed to do, you can use it.
+As it's the purpose of the portal, it's super simple to do:
 
+. Click btn:[Start].
+. While the job runs, you can btn:[Cancel] it.
+. You can also use btn:[Show Logs] to get a simplified version of the job log you know from AAP.
+. And once the job is finished, you can restart it with btn:[Start Over].
 
+== Conclusion
+
+In this chapter, you've learned how to:
+
+* Connect the Self-Service Automation Portal to AAP
+* Configure access rights in the portal
+* Synchronize and start job templates using the portal
