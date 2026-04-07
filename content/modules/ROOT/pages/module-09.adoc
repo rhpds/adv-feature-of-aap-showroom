@@ -22,7 +22,7 @@ Ready to give this feature a try? This is your setup:
 ====
 We are running the OPA server here with no authentication, no TLS/HTTPS and no access controls.
 This is obviously only suitable for this lab, for using OPA in production your setup has to be more involved.
-And note you have to provide your own OPA server anyway as it isn't part of AAP.
+Consider that you have to provide your own OPA server as it isn't part of AAP.
 ====
 
 The flow when using Policy Enforcement is this:
@@ -33,7 +33,8 @@ The flow when using Policy Enforcement is this:
 * **Decision**: If the decision is `Allow: true`, the job proceeds to execution. But with `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
 
 
-As always it's better to see this in action, so let's get started! If you haven't already, log in to Codeserver (password **{controller_password}**.) and AAP (user **lab-user**, password **{controller_password}**).
+As always it's better to see this in action, so let's get started!
+If you haven't already, log in to Codeserver (password **{vscode_server_password}**.) and AAP (user **lab-user**, password **{controller_password}**).
 
 The first step are the rego policies. We did prepare a number of policies for you to get started, clone the repo to your bastion host and copy the policies to the OPA server policy directory:
 
@@ -58,6 +59,7 @@ image::opa-server.png[800,600,link=self,window=blank]
 
 Before configuring a policy, let's have a look at the policy `deny.rego` which is very simple and just returns an `allowed: false` as a result, basically denying all requests to OPA:
 
+.`deny.rego`
 [source,rego]
 ----
 package aap.deny
@@ -97,6 +99,7 @@ No surprises here... the Template execution is not allowed and the message is th
 
 Let's try to do something more meaningful (I mean denying everything is not particular helpful... ;-). The second Policy looks like this:
 
+.`extra_vars.rego`
 [source,rego,subs="attributes"]
 ----
 package aap.extravars
@@ -225,7 +228,7 @@ Save the file. Now head over to AAP and configure it, we'll use the Demo Job Tem
 ** Find the field **Labels**, type `maintenance` into it and hit **Enter**
 ** **Save job template**
 
-== Testing the Policy
+=== Test the Policy
 
 To test your configuration, launch the job.
 
@@ -233,9 +236,9 @@ Since you have configured the current time to be inside our maintenance window a
 
 In the next step , remove the label again:
 
-** Open the **Demo Job Template** for editing
-** In the field **Labels**, hit the x on the label `maintenance` to remove it
-** **Save job template**
+. Open the **Demo Job Template** for editing
+. In the field **Labels**, hit the x on the label `maintenance` to remove it
+. **Save job template**
 
 You will be greeted by a policy violation:
 
@@ -247,8 +250,8 @@ This job cannot be executed due to a policy violation or error. See the followin
 
 Now:
 
-** Change the time window again so the current time is **not** inside the window
-** Add the `maintenance` label to the Job Template again
+. Change the time window again so the current time is **not** inside the window
+. Add the `maintenance` label to the Job Template again
 
 When the Job Template is launched, you will get a policy violation again:
 
