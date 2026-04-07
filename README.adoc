@@ -3,6 +3,17 @@
 * https://github.com/rhpds/adv-feature-of-aap-showroom[Source code]
 * https://rhpds.github.io/adv-feature-of-aap-showroom[Rendered site]
 
+== Quick Style Guide
+
+* Use numbered lists for instructions wherever possible
+* Follow https://docs.antora.org/antora-ui-default/ui-macro-styles/[Antora's UI macro styles^]
+** Use `menu:MenuName[SubMenu > SubSubMenu]` for menu and navigation
+** Use `btn:[ButtonName]` for UI buttons and similar
+** Use `kbd:[KeyName]` for key strokes
+* Use **Bold** for field names and `Monospace` for field values in a dialog
+* Write https://asciidoctor.org/docs/asciidoc-recommended-practices/#one-sentence-per-line[one sentence per line^]
+* Add a caret at the end of external link names to  open them in a new tab or window e.g. `link:mylink[myname^]` (`window=blank` is an acceptable alternative)
+
 == Nookbag Showroom Template
 
 A template for creating Red Hat Showroom lab guides and demo content, built with https://antora.org[Antora].

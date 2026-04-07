@@ -73,7 +73,7 @@ The following chapters explain in more details how to access the command line.
 
 Your main point of contact with the lab is **VS Code Server**, providing a VS Code-experience in your browser. You'll use VS Code to open terminals and to edit files (either in the build-in GUI editor or just using your favorite editor on the command line).
 
-Now, open **VS Code** by clicking on the URL {vscode_server_url}[window=blank], or click on the "@Codeserver" tab (which should be the default).
+Now, open **VS Code** by clicking on the URL {vscode_server_url}[window=blank], or click on the menu:Codeserver[] tab (which should be the default).
 
 You should be greeted with a login screen:
 
@@ -158,14 +158,14 @@ image::navigator-images.png[link=self,window=blank]
 NOTE: The output you see might differ from the above output, but you should see at least the one image configured in the file.
 Beware that the procedure might take one or two minutes to pull and save the image locally.
 
-This command gives you information about all currently installed Execution Environments or EEs for short. Investigate an EE by pressing the corresponding number. For example pressing **0** with the above example will open the `ee-supported-rhel9` execution environment:
+This command gives you information about all currently installed Execution Environments or EEs for short. Investigate an EE by pressing the corresponding number. For example pressing kbd:[0] with the above example will open the `ee-supported-rhel9` execution environment:
 
 image::navigator-ee-menu.png[link=self,window=blank]
 
-Selecting e.g. **0** for `Image information` will show information about the execution environment image you are inspecting:
+Selecting e.g. kbd:[0] for menu:Image information[] will show information about the execution environment image you are inspecting:
 
 image::navigator-ee-info.png[link=self,window=blank]
 
-To get back to the preceding view in `ansible-navigator` press **Esc**, if needed several times.
+To get back to the preceding view in `ansible-navigator` press kbd:[Esc], if needed several times.
 The last press in the main menu will get you out of Navigator.
-Alternatively you can type **:q** anywhere to exit at once (familiar with Vi?).
+Alternatively you can type kbd:[:q] anywhere to exit at once (familiar with Vi?).
