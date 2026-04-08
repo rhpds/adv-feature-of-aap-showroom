@@ -1,26 +1,26 @@
 = Configure resources with Ansible
 
 This is an advanced lab, so we don’t really want you to use the web UI for everything.
-To fully embrace automation and adopt the https://en.wikipedia.org/wiki/Infrastructure_as_code[infrastructure as code^] (IaC) and https://redhat-cop.github.io/aap_config_as_code_docs/[Configuration as Code^] (CaC) methodology, **we want to use Ansible to configure our automation platform**.
+To fully embrace automation and adopt the https://en.wikipedia.org/wiki/Infrastructure_as_code[infrastructure as code,window=blank] (IaC) and https://redhat-cop.github.io/aap_config_as_code_docs/[Configuration as Code,window=blank] (CaC) methodology, **we want to use Ansible to configure our automation platform**.
 
 Since the automation platform is exposing all of its functionality via REST API, we can automate everything.
 Instead of using the API directly, it is highly recommended to use the Ansible Collections to setup, configure and maintain your Red Hat Ansible Automation Platform using Ansible.
 
 Before we jump into the details, let's have a quick overview of the currently available collections and how they rely on each other.
 
-- https://console.redhat.com/ansible/automation-hub/repo/published/ansible/controller/[ansible.controller^] This Ansible collection allows for easy interaction with an Red Hat Ansible Automation Platform server via Ansible playbooks.
-- https://console.redhat.com/ansible/automation-hub/repo/published/ansible/eda/[ansible.eda^] This collection contains event source plugins, event filters and example rulebooks to be used with ansible-rulebook.
-- https://console.redhat.com/ansible/automation-hub/repo/published/ansible/hub/[ansible.hub^] This Ansible collection allows for easy interaction with an Ansible Automation Hub server via Ansible playbooks.
-- https://console.redhat.com/ansible/automation-hub/repo/published/ansible/platform/[ansible.platform^] This collection contains modules that can be used to automate the creation of resources on Ansible Automation Platform.
+* https://console.redhat.com/ansible/automation-hub/repo/published/ansible/controller/[ansible.controller,window=blank] — Ansible collection for interacting with Red Hat Ansible Automation Platform via playbooks.
+* https://console.redhat.com/ansible/automation-hub/repo/published/ansible/eda/[ansible.eda,window=blank] — Event source plugins, event filters, and example rulebooks for ansible-rulebook.
+* https://console.redhat.com/ansible/automation-hub/repo/published/ansible/hub/[ansible.hub,window=blank] — Ansible collection for interacting with Ansible Automation Hub via playbooks.
+* https://console.redhat.com/ansible/automation-hub/repo/published/ansible/platform/[ansible.platform,window=blank] — Modules to automate creating resources on Ansible Automation Platform.
 
 == The Scenario
 
 For the next chapters we need a number of resources configured in AAP:
 
-- Static **Inventory** with two hosts
-- **Credentials**
-- Some **Projects**
-- A number of **Job Templates**
+* Static **Inventory** with two hosts
+* **Credentials**
+* Some **Projects**
+* A number of **Job Templates**
 
 This would involve a lot of error prone clicking in the web UI, so you'll use the pro way: a playbook was prepared upfront to save time, but you will still learn how to use Ansible to configure the Automation Execution part of AAP.
 
@@ -68,7 +68,7 @@ NOTE: For your convenience we added the authentication credentials for automatio
 In most real world scenarios you probably don't want to do this and will not store your password in a clear text configuration file.
 
 TIP: For performance and security reasons, it is recommended "in real life" to generate and use a token for your automation.
-Check the https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/using_content_navigator/[ansible-navigator^] documentation for details on how to do this.
+Check the https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/using_content_navigator/[ansible-navigator,window=blank] documentation for details on how to do this.
 
 == Create the Playbook
 
@@ -113,7 +113,7 @@ To leave, press kbd:[Esc] multiple times to get up again in the views and eventu
 IMPORTANT: Do **not** leave the Navigator TUI (Text User Interface) before the job is finished!
 Check the colored text box in the bottom-right corner, it must go from [.green-background]#Running# to [.green-background]#Successful#.
 
-After the successful run, log into your {controller_url}[Ansible Automation Platform web UI,window=blank], using the user *{controller_username}* and the usual password *{controller_password}*.
+After the successful run, log in to {controller_url}[Ansible Automation Platform,window=blank] as `{controller_username}` with password `{controller_password}`.
 Open menu:Automation Execution[] and make sure that you see the configured objects and that three jobs "Source Control Update" have successfully been executed which cloned the git repositories.
 
 TIP: If you run this Ansible Playbook multiple times, you will notice the **ansible.controller.credential** module is not idempotent!

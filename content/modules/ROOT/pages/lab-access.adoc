@@ -35,6 +35,6 @@ s|SSH Username s|SSH Password s| SSH Host s| SSH PORT
 {ssh_command}
 ----
 
-TIP: the Showroom tab named ">_Terminal" gives you a similar look & feel as would SSH, without the need to login.
-Copy works generally with Ctrl+C and Paste with Shift+Ctrl+V; if not, simply use the right mouse button and select Copy resp. Paste from the menu.
+TIP: The Showroom tab named ">_Terminal" gives you a similar look and feel as SSH, without the need to log in.
+Copy works generally with kbd:[Ctrl+C] and paste with kbd:[Shift+Ctrl+V]; if not, use the right mouse button and select menu:Copy[] or menu:Paste[] from the context menu.
 
