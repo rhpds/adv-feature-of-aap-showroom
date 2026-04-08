@@ -5,7 +5,7 @@
 With Ansible Automation Platform 2.5 we have introduced a new, unified Web UI.
 It provides consistent access to the components of AAP in one interface. 
 
-To access the UI, open {controller_url}[Ansible Automation Platform,window=blank] in a new browser tab, or in Showroom click the **AAP** tab.
+To access the UI, open {controller_url}[window=blank] in a new browser tab, or in Showroom click the menu:AAP[] tab.
 Both take you to the AAP login page:
 
 image::aap-login.png[500,300,link=self,window=blank]

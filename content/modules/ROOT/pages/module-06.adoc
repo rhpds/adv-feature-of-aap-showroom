@@ -40,7 +40,7 @@ The first line informs the automation execution that we want to use the construc
 Now while in the details view of the **Constructed Inventory**:
 
 . Click btn:[Sync inventory].
-. After the sync has finished, open the **Hosts** tab of the **Constructed inventory**.
+. After the sync has finished, open the menu:Hosts[] tab of the **Constructed inventory**.
 You should see all hosts from the `Cloud inventory` and the `Lab inventory` combined.
 . In the *Groups* tab you should also see a group called *dyngroup* which was imported from our dynamic inventory `Cloud inventory`.
 

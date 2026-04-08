@@ -52,7 +52,7 @@ Open menu:Automation Execution[Templates] and click btn:[Create template].
 --
 ** **Name:** `Deploy Webapplication`
 ** **Organization:** `Default`
-** Click btn:[Create workflow job template]
+** Click btn:[Create workflow job template] at the bottom
 --
 +
 After saving the template the **Workflow Visualizer** opens to allow you to build a workflow. You can later open the **Workflow Visualizer** again by using the button labeled btn:[Visualizer] on the template details page.

@@ -14,7 +14,7 @@ You will clone this repository locally to your bastion host and then see how aut
 
 === Access Gitea
 
-Open the menu:Gitea[] tab in Showroom, or go to {gitea_url}[Gitea,window=blank] in your browser.
+Open the menu:Gitea[] tab in Showroom, or go to {gitea_url}[window=blank] in your browser.
 
 Sign in to Gitea as user `{gitea_username}` with the password `{gitea_password}`.
 

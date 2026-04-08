@@ -7,12 +7,13 @@
 
 * Use numbered lists for instructions that must be followed in order; use bullets for parallel items or general lists
 * Follow https://docs.antora.org/antora-ui-default/ui-macro-styles/[Antora UI macro styles,window=blank]
-** Use `menu:MenuName[SubMenu > SubSubMenu]` for menu and navigation
+** Use `menu:MenuName[SubMenu > SubSubMenu]` for menu, tabs and navigation
 ** Use `btn:[ButtonName]` for UI buttons and similar
 ** Use `kbd:[KeyName]` for key strokes
 * Use **Bold** for field names and `Monospace` for field values in a dialog
 * Write https://asciidoctor.org/docs/asciidoc-recommended-practices/#one-sentence-per-line[one sentence per line,window=blank]
-* Open external links in a new tab using `link:url[Text,window=blank]` or `https://url[Text,window=blank]` (a trailing `^` on the link text is an acceptable alternative)
+* Open external links in a new tab using `link:url[Text,window=blank]` or `https://url[Text,window=blank]` (a trailing `^` on the link text is an acceptable alternative).
+Internal links to environment services have no text to not obfuscate the URL, but are still opened in a new tab.
 
 == Nookbag Showroom Template
 

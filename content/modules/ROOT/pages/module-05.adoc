@@ -156,7 +156,7 @@ You can directly proceed to adding the dynamic inventory and pointing it to the 
 ** **Name:** `Cloud inventory`
 ** **Organization:** `Default`
 . Click btn:[Create inventory].
-. Open the **Sources** tab and click btn:[Create Source].
+. Open the menu:Sources[] tab and click btn:[Create Source].
 . Fill in the fields:
 ** **Name:** `Cloud inventory Script`
 ** **Source:** `Sourced from a Project`
@@ -165,14 +165,15 @@ You can directly proceed to adding the dynamic inventory and pointing it to the 
 ** Enable **Update on launch**
 ** **Cache timeout (seconds):** `300`
 . Click btn:[Create source].
-. Return to the **Sources** tab of the **Cloud inventory**.
+. Return to the menu:Sources[] tab of the **Cloud inventory**.
 . Start the inventory update using the circular arrows icon.
 
 image::inventory-source.png[800,600,link=self,window=blank]
 
 Open menu:Automation Execution[Jobs] to watch the initial sync; **Type** is `Inventory sync`.
 
-After the inventory sync has finished, open menu:Automation Execution[Infrastructure > Hosts] and review the new hosts added to the **Cloud inventory**. You should see hosts matching the JSON output above.
+After the inventory sync has finished, open menu:Automation Execution[Infrastructure > Hosts] and review the new hosts added to the **Cloud inventory**.
+You should see hosts matching the JSON output above.
 
 == What is the take-away?
 

@@ -19,12 +19,12 @@ Using the SSAP RHEL appliance, administrators will have to configure it and set 
 Most of this work has been done for you in this lab, only a few steps are required.
 First check that the OAuth application has been configured, this is needed because SSAP uses AAP for authentication.
 
-Access your AAP UI from the **AAP** tab in Showroom, or open {controller_url}[Ansible Automation Platform,window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`. Then:
+Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}[window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`. Then:
 
 . Open menu:Access Management[OAuth Applications].
 . Open the OAuth application named `Selfservice-*****`.
 . Confirm it looks like this:
-
++
 image::oauth-app.png[800,600,link=self,window=blank]
 
 You'll need to create a team called `aap-admins` belonging to the `Default` organization.
@@ -42,6 +42,7 @@ We could create and add users to this new team but {controller_username} as syst
 
 From a terminal as `lab-user` on the bastion, connect to the SSAP appliance:
 
+[source,shell]
 ----
 ssh ssap
 ----
@@ -62,7 +63,7 @@ image::ssp-ready.png[800,600,link=self,window=blank]
 
 Access the SSP UI:
 
-. Open {ssap_url}[Self-Service Portal,window=blank]. Sign in with Ansible Automation Platform when prompted.
+. Open {ssap_url}[window=blank]. Sign in with Ansible Automation Platform when prompted.
 . Click btn:[Sign In].
 . If directed to AAP, log in if needed as `{controller_username}` with password `{controller_password}`.
 . Click btn:[Authorize] for Read and Write scope access.
