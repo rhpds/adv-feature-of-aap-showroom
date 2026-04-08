@@ -11,27 +11,29 @@ Congratulations! In this lab, you have:
 * Implemented RBAC (Role-Based Access Control) for secure self-service access
 * Used dynamic and constructed inventories to flexibly extend the scope of your automation
 * Applied content signing to secure your automation supply chain
+* Getting a first impression of the powerful, new Self-Service Automation Portal
+* Learned, how to use Policy Enforcement to automate in a safe and compliant way
 
 == References
 
-* link:https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/[Red Hat Ansible Automation Platform 2.6 Documentation^]
-* link:https://www.redhat.com/en/technologies/management/ansible/event-driven-ansible[Event Driven Ansible (Decisions)^]
-* link:https://www.redhat.com/en/technologies/management/ansible/content-collections[Ansible Content Collections^]
-* link:https://www.redhat.com/en/technologies/management/ansible/development-tools[Ansible Development Tools^]
-* link:https://redhat-cop.github.io/aap_config_as_code_docs/[Configuration as Code Documentation^]
+* link:https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/[Red Hat Ansible Automation Platform 2.6 Documentation,window=blank]
+* link:https://www.redhat.com/en/technologies/management/ansible/event-driven-ansible[Event Driven Ansible (Decisions),window=blank]
+* link:https://www.redhat.com/en/technologies/management/ansible/content-collections[Ansible Content Collections,window=blank]
+* link:https://www.redhat.com/en/technologies/management/ansible/development-tools[Ansible Development Tools,window=blank]
+* link:https://redhat-cop.github.io/aap_config_as_code_docs/[Configuration as Code Documentation,window=blank]
 
 == Next Steps
 
-If you want to redo some of the exercises, or share your experience with others, simply https://www.redhat.com/en/technologies/management/ansible/trial[spin up your own trial instance^], create a RHEL host with `ansible-navigator` and `ansible-sign` installed, and spin up two generic RHEL hosts.
-With some adaptation, you should then be able to follow most of the https://rhpds.github.io/adv-feature-of-aap-showroom/modules/index.html[(generic) guide available online^].
+If you want to redo some of the exercises, or share your experience with others, simply https://www.redhat.com/en/technologies/management/ansible/trial[spin up your own trial instance,window=blank], create a RHEL host with `ansible-navigator` and `ansible-sign` installed, and spin up two generic RHEL hosts.
+With some adaptation, you should then be able to follow most of the https://rhpds.github.io/adv-feature-of-aap-showroom/modules/index.html[(generic) guide available online,window=blank].
 
 NOTE: The term "generic" means that hostnames, users and passwords are not adapted to your environment and are only placeholders.
 It'll be up to you to apply the right values while reading the guide.
 
 The Git repositories we use in this lab are also freely available:
 
-Lab Project Repo:: https://gitlab.com/ansible-labs-crew/playbooks-adv-controller-2025.git[^]
-Webdev Git Repo:: https://gitlab.com/ansible-labs-crew/playbooks-dev.git[^]
-Webops Git Repo:: https://gitlab.com/ansible-labs-crew/playbooks-ops.git[^]
+Lab Project Repo:: https://gitlab.com/ansible-labs-crew/playbooks-adv-controller-2025.git[playbooks-adv-controller-2025,window=blank]
+Webdev Git Repo:: https://gitlab.com/ansible-labs-crew/playbooks-dev.git[playbooks-dev,window=blank]
+Webops Git Repo:: https://gitlab.com/ansible-labs-crew/playbooks-ops.git[playbooks-ops,window=blank]
 
 CAUTION: You might need to adapt slightly some of the code to your environment to make everything work correctly.

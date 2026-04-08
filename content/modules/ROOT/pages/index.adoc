@@ -25,15 +25,15 @@ NOTE: This lab is ideal for anyone with basic Ansible Automation Platform experi
 
 Your lab includes a number of servers:
 
-- A bastion host running VS Code server and Gitea server.
+* A bastion host running VS Code server and Gitea server.
   You'll also use the command line there to do some Ansible development.
-- A one-node AAP cluster.
-- Two managed RHEL 9 hosts.
-- The Self-Service Portal RHEL appliance
+* A one-node AAP cluster.
+* Two managed RHEL 9 hosts.
+* The Self-Service Portal RHEL appliance
 
 [TIP]
 ====
-. All access information has been summarized for your convenience on page link:lab-access.html[Lab Access].
+. All access information has been summarized for your convenience on page xref:lab-access.adoc[Lab Access].
 . This page and all others are accessible from the upper left corner image:corner_menu.png[role=half-width] on narrow screens, the menu is expanded to the left on broader screens.
 ====
 
@@ -41,11 +41,11 @@ Your lab includes a number of servers:
 
 Some hints to get you started:
 
-- Don’t type everything manually, use copy & paste from the browser when appropriate, but take your time to understand what you are actually doing.
-- To **edit files** or **open a terminal window**, we provide **VS Code Server**, basically the great Visual Studio Code Editor running in your browser.
-- You can click on any screenshot to magnify it in a new window or tab.
+* Don’t type everything manually, use copy & paste from the browser when appropriate, but take your time to understand what you are actually doing.
+* To **edit files** or **open a terminal window**, we provide **VS Code Server**, basically the great Visual Studio Code Editor running in your browser.
+* You can click on any screenshot to magnify it in a new window or tab.
   Once done, simply close the window or tab to come back to the instructions.
-- Copy & Paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the pop-up menu summoned by a right mouse-click always works.
+* Copy and paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the pop-up menu summoned by a right mouse-click always works.
 
 == Finding your way in the lab
 
@@ -79,13 +79,13 @@ WARNING: While forward-skipping chapters has been tested, jumping backwards has 
 
 Your main point of contact with the lab is **VS Code Server**, providing a VS Code-experience in your browser. You'll use VS Code to open terminals and to edit files (either in the build-in GUI editor or just using your favorite editor on the command line).
 
-Now, open **VS Code** by clicking on the URL {vscode_server_url}[window=blank], or click on the menu:Codeserver[] tab (which should be the default).
+Now, open **VS Code** using {vscode_server_url}[VS Code Server,window=blank], or click the menu:Codeserver[] tab (which should be the default).
 
 You should be greeted with a login screen:
 
 image::vscode-pwd.png[500,300,link=self,window=blank]
 
-Use the password **{vscode_server_password}** to log in to the **VS Code** server web UI. Now open a new terminal by heading to the menu item **Terminal** at the top of the **VS Code** UI and select **New Terminal** (the menu item might be hidden depending on browser width, behind three dots). A new section will appear in the lower half of the screen and you will be greeted with a prompt:
+Use the password `{vscode_server_password}` to log in to the **VS Code** server web UI. Open a new terminal with menu:Terminal[New Terminal] at the top of the **VS Code** UI (the menu item might be hidden depending on browser width, behind three dots). A new section will appear in the lower half of the screen and you will be greeted with a prompt:
 
 image::vscode-terminal.png[link=self,window=blank]
 
@@ -112,9 +112,9 @@ The "Terminal" tab gives you the same impression as SSH without the need to logi
 
 Most prerequisite tasks have already been fulfilled for you:
 
-- Ansible software is installed
-- `sudo` has been configured on the managed hosts to run commands that require root privileges.
-- An `.ansible-navigator.yml` configuration file has been created.
+* Ansible software is installed
+* `sudo` has been configured on the managed hosts to run commands that require root privileges.
+* An `.ansible-navigator.yml` configuration file has been created.
 Without it, you would have to add parameters to each execution of `ansible-navigator`.
 
 == Brief Introduction to `ansible-navigator`
@@ -140,13 +140,13 @@ Have now a look at your Ansible Navigator configuration file. It's a dot file in
 cat ~/.ansible-navigator.yml
 ----
 
-You can also open the file in VS Code by using the navigation bar on the left or the "Open File" command from the "File" menu.
+You can also open the file in VS Code by using the navigation bar on the left or menu:File[Open File].
 
 Note the following parameters within the `execution-environment` section:
 
-- `image`: where the default execution environment is set, we have switched it to your **private automation hub**
-- `pull.policy`: set to **missing**, only download the execution environment if it doesn't already exist locally.
-- `environment-variables`: since execution environments are basically Linux containers, which don't have access to your environment variables, we have to compile a list of variables we want to have passed through to the container, or even specifically defined.
+* `image`: where the default execution environment is set, we have switched it to your **private automation hub**
+* `pull.policy`: set to **missing**, only download the execution environment if it doesn't already exist locally.
+* `environment-variables`: since execution environments are basically Linux containers, which don't have access to your environment variables, we have to compile a list of variables we want to have passed through to the container, or even specifically defined.
 
 For a full listing of every configurable knob checkout the link:https://ansible.readthedocs.io/projects/navigator/settings/[settings documentation,window=blank].
 

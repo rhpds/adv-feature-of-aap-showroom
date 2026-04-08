@@ -14,7 +14,7 @@ You will clone this repository locally to your bastion host and then see how aut
 
 === Access Gitea
 
-Go to the Showroom tab **Gitea** or point your browser to {gitea_url}[window=blank].
+Open the menu:Gitea[] tab in Showroom, or go to {gitea_url}[Gitea,window=blank] in your browser.
 
 Sign in to Gitea as user `{gitea_username}` with the password `{gitea_password}`.
 
@@ -74,7 +74,7 @@ Expire-Date: 0
 ----
 
 Think of this file as the instructions given to the GnuPG library on the system about the type of key pair we want to create.
-This creates a key pair _without_ a passphrase (of course, normally you would want to have a passphrase for https://www.redhat.com/sysadmin/creating-gpg-keypairs[your private GPG key^]).
+This creates a key pair _without_ a passphrase (of course, normally you would want to have a passphrase for https://www.redhat.com/sysadmin/creating-gpg-keypairs[your private GPG key,window=blank]).
 
 Now create a GPG key pair using the `gpg.txt` file. Run the following commands in the Terminal window to create the key pair.
 
@@ -269,48 +269,49 @@ cat ~/signing_demo.asc
 
 Copy _all_ of its contents _including_ `-----BEGIN PGP PUBLIC KEY BLOCK-----` and `-----END PGP PUBLIC KEY BLOCK-----`.
 
-In the web UI go to *Automation Execution* ⇒ *Infrastructure* ⇒ *Credentials*. Then:
+In the web UI, open menu:Automation Execution[Infrastructure > Credentials].
 
-. Click on the blue **Create Credential** button.
-* **Name**: ansible-sign
-* **Credential Type**: GPG Public Key
-. This will open a textbox for you to paste the public key that is in the Clipboard.
-. Click **Create Credential**.
+. Click btn:[Create Credential].
+. Set:
+** **Name:** `ansible-sign`
+** **Credential Type:** `GPG Public Key`
+. Paste the full public key from the clipboard into the text field.
+. Click btn:[Create Credential].
 
 This will add the public key as a Credential in your automation controller.
 
 === Create Project with signed content
 
-To configure the Gitea repository as a Project we need an SCM credential. Again in the *Credentials* section do:
+To configure the Gitea repository as a project you need an SCM credential. In menu:Automation Execution[Infrastructure > Credentials]:
 
-. Click on the blue **Create credential** button.
-. Enter:
-* **Name**: gitea
-* **Organization**: Default
-* **Credential Type**: Source Control
-* **Username**: {gitea_username}
-* **Password**: {gitea_password}
-. Click **Create credential**.
+. Click btn:[Create credential].
+. Set:
+** **Name:** `gitea`
+** **Organization:** `Default`
+** **Credential Type:** `Source Control`
+** **Username:** {gitea_username}
+** **Password:** {gitea_password}
+. Click btn:[Create credential].
 
-Now, to create the Project, go to *Automation Execution* ⇒ *Projects*:
+Create the project in menu:Automation Execution[Projects]:
 
-. Click on the blue **Create project** button
-. Enter:
-* **Name**: Signed Project
-* **Organization:** Default
-* **Source Control Type**: Git
-* **Content Signature Validation Credential**: ansible-sign
-* **Source Control URL**: The clone URL of your Gitea repository, {gitea_url}/{gitea_username}/{gitea_controller_project}.git
-* **Source Control Credential**: gitea
-. Click **Create project**
+. Click btn:[Create project].
+. Set:
+** **Name:** `Signed Project`
+** **Organization:** `Default`
+** **Source Control Type:** `Git`
+** **Content Signature Validation Credential:** `ansible-sign`
+** **Source Control URL:** {gitea_url}/{gitea_username}/{gitea_controller_project}.git
+** **Source Control Credential:** `gitea`
+. Click btn:[Create project].
 
 The important part of the Project configuration is **Content Signature Validation Credential**, this tells automation controller to use the GPG key in the credentials to verify the repository.
 
 == Check if signatures were validated in controller
 
-Let's check if the signatures have been checked during the initial Project sync when you click **Create Project**.
+Let's check if the signatures were verified during the initial project sync when you clicked btn:[Create project].
 
-Click on **Automation Execution** ⇒ **Jobs** on the left menu and then click the most recent job that ran the project sync for the **Signed Project**. If this job was successful, that means the signature validation was successful. You can also verify this by looking at the tasks in the job run, scroll the job run to find the below tasks:
+Open menu:Automation Execution[Jobs] and select the most recent project sync job for **Signed Project**. If the job succeeded, signature validation succeeded. You can also scroll the job output to find these tasks:
 
 [source,shell]
 ----
@@ -345,8 +346,8 @@ In both cases, enter `{gitea_username}` respectively `{gitea_password}`.
 
 If this change was legit, you would have re-signed the repository content. This way automation controller should recognize the signature of the file is not valid anymore and fail the repository sync. Give it a try:
 
-* In the web UI go to *Automation Execution* ⇒ *Projects* and start a sync of the **Signed Project** repository by clicking the circular arrow icon.
-* Check the result in the **Jobs** list!
+* In the web UI, open menu:Automation Execution[Projects] and start a sync of **Signed Project** using the circular arrow icon.
+* Check the result in menu:Automation Execution[Jobs].
 
 The sync job should fail and the output should clearly indicate why:
 

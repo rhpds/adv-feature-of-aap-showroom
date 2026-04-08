@@ -117,19 +117,19 @@ What it basically does is to return the data collected by curl when called with 
 
 But before we integrate the custom inventory plugin into our automation execution, it’s a good idea to test it on the command line:
 
-* Bring up your VS Code browser tab, refer to the xref:lab-access.adoc[Lab Access] page if the tab was closed.
-* In either the visual editor or in the terminal using your favorite command line editor, create the file `/home/{ssh_username}/dyninv.sh` with the content of the Bash script shown above.
+. Bring up your VS Code browser tab; see xref:lab-access.adoc[Lab Access] if the tab was closed.
+. In either the visual editor or in the terminal using your favorite command-line editor, create the file `/home/{ssh_username}/dyninv.sh` with the content of the Bash script shown above.
 
-TIP: Make sure to really create the script in `/home/{ssh_username}/`
+TIP: Create the script in `/home/{ssh_username}/`.
 
-* Make the script executable:
+. Make the script executable:
 +
 [source,shell,role=execute,subs="attributes"]
 ----
 chmod +x /home/{ssh_username}/dyninv.sh
 ----
 
-* Execute it:
+. Run it:
 +
 [source,shell,role=execute,subs="attributes"]
 ----
@@ -150,29 +150,29 @@ For this lab the inventory script was already created in the Git repository you 
 
 You can directly proceed to adding the dynamic inventory and pointing it to the inventory script.
 
-. In the AAP web UI, open *Automation Execution* ⇒ *Infrastructure* ⇒ *Inventories*.
-. To create a new inventory, click the blue *Create inventory* drop-down and click on *Create inventory*.
-. Fill in the needed data:
-** *Name:* Cloud inventory
-** *Organization:* Default
-. Click *Create inventory*
-. Change to the *Sources* tab and click the blue *Create Source* button.
-. Fill in the needed data:
-** *Name:* Cloud inventory Script
-** *Source:* Sourced from a Project
-** *Project:* Lab Project Repo
-** *Inventory file:* constructed-inventory/inventory-script
-** enable *Update on launch*
-** *Cache timeout (seconds)*: 300
-. Click on *Create source*
-. Go back to the *Sources* tab of the Cloud inventory
-. Start the inventory update by clicking the circular arrows icon
+. In the AAP web UI, open menu:Automation Execution[Infrastructure > Inventories].
+. To create a new inventory, open the btn:[Create inventory] drop-down and click btn:[Create inventory].
+. Fill in the fields:
+** **Name:** `Cloud inventory`
+** **Organization:** `Default`
+. Click btn:[Create inventory].
+. Open the **Sources** tab and click btn:[Create Source].
+. Fill in the fields:
+** **Name:** `Cloud inventory Script`
+** **Source:** `Sourced from a Project`
+** **Project:** `Lab Project Repo`
+** **Inventory file:** `constructed-inventory/inventory-script`
+** Enable **Update on launch**
+** **Cache timeout (seconds):** `300`
+. Click btn:[Create source].
+. Return to the **Sources** tab of the **Cloud inventory**.
+. Start the inventory update using the circular arrows icon.
 
 image::inventory-source.png[800,600,link=self,window=blank]
 
-Navigate to *Jobs* in the *Automation Execution* section to watch the initial sync, the *Type* is `Inventory sync`.
+Open menu:Automation Execution[Jobs] to watch the initial sync; **Type** is `Inventory sync`.
 
-After the inventory sync has finished check out the new hosts which were added by it to your _Cloud inventory_, by going to *Automation Execution* ⇒ *Infrastructure* ⇒ *Hosts*. You should find a number of new hosts according to the JSON output above.
+After the inventory sync has finished, open menu:Automation Execution[Infrastructure > Hosts] and review the new hosts added to the **Cloud inventory**. You should see hosts matching the JSON output above.
 
 == What is the take-away?
 

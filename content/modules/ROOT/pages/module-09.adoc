@@ -14,9 +14,9 @@ With Ansible Automation Platform, you can enforce policies at automation runtime
 
 Ready to give this feature a try? This is your setup:
 
-** On your bastion host a Open Policy Agent (OPA) server runs as a Podman container
-** You need to create policies and make them available to the OPA server
-** You can then configure Automation Controller to validate actions before a Job Template is run
+* On your bastion host, an Open Policy Agent (OPA) server runs as a Podman container.
+* You create policies and make them available to the OPA server.
+* You configure Automation Controller to validate actions before a job template runs.
 
 [WARNING]
 ====
@@ -33,10 +33,10 @@ The flow when using Policy Enforcement is this:
 * **Decision**: If the decision is `Allow: true`, the job proceeds to execution. But with `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
 
 
-As always it's better to see this in action, so let's get started!
-If you haven't already, log in to Codeserver (password **{vscode_server_password}**.) and AAP (user **lab-user**, password **{controller_password}**).
+As always it is better to see this in action, so let us get started.
+If you have not already, log in to menu:Codeserver[] (password `{vscode_server_password}`) and AAP as `{controller_username}` with password `{controller_password}`.
 
-The first step are the rego policies. We did prepare a number of policies for you to get started, clone the repo to your bastion host and copy the policies to the OPA server policy directory:
+The first step is the Rego policies. A set of policies is prepared for you; clone the repository on the bastion host and copy the policies into the OPA server policy directory:
 
 In your VS Code terminal (or SSH session) run:
 
@@ -81,9 +81,9 @@ To actually use policies in Automation Execution you have to configure Policy En
 
 To keep it easy for now let's just configure the `deny` policy for the `Demo Job Template`:
 
-** Go to menu:Automation Execution[Templates] and click the pencil icon on the **Demo Job Template** to edit it
-** Set the field **Policy enforcement** to `aap/deny`
-** Click **Save job template**
+. Open menu:Automation Execution[Templates] and edit **Demo Job Template** using the pencil icon.
+. Set **Policy enforcement** to `aap/deny`.
+. Click btn:[Save job template].
 
 Now go ahead and launch the Job Template. It should return
 
@@ -147,19 +147,19 @@ violations := array.concat(
 allowed := count(violations) == 0
 ----
 
-This policy reads the `extra_vars` that might be configured in the Job Template from the JSON input passed by Automation Controller. It will
+This policy reads the `extra_vars` that might be configured in the job template from the JSON input passed by Automation Controller. It will:
 
-** Check for allowed keys
-** Check for allowed values for the keys
+* Check for allowed keys.
+* Check for allowed values for those keys.
 
 === Configure the Policy
 
 If the input doesn't match the allowed input it will deny the Template run. Let's put this to the test:
 
-** Again open the **Demo Job Template** for editing
-** Change the field **Policy enforcement** to `aap/extravars`
-** In the field **Extra variables**: `color: red`
-** **Save job template**
+. Open **Demo Job Template** for editing again.
+. Set **Policy enforcement** to `aap/extravars`.
+. In **Extra variables**, enter `color: red`.
+. Click btn:[Save job template].
 
 === Test the Policy
 
@@ -189,17 +189,17 @@ Here is another real-world example dealing with maintenance windows. Companies o
 
 Here our policy `maintenance_window.rego` comes to the rescue:
 
-** It checks if the current time is inside a given start and end time, this is the maintenance window
-** Allows execution of Job Templates in the specified time window only when it has the label `maintenance`.
-** Doesn't allow the execution of Job Templates with the label `maintenance` outside the maintenance window
+* It checks whether the current time is inside a configured start and end time (the maintenance window).
+* It allows job templates to run in that window only when they have the label `maintenance`.
+* It blocks job templates that have the label `maintenance` outside the maintenance window.
 
 === Configure the Policy
 
-The policy file has alread been copied to the policy directory. To make sure the current time is inside the time window specified:
+The policy file has already been copied to the policy directory. To place the current time inside the configured window:
 
-** Find the current time in UTC by running `date -u` in your terminal 
-** Open the `/var/lib/opa/policies/maintenance_window.rego` in the VS Code editor or your favorite editor
-** Find the block with the time specs:
+. Run `date -u` in your terminal to get the current UTC time.
+. Open `/var/lib/opa/policies/maintenance_window.rego` in VS Code or your editor.
+. Find the block with the time values:
 
 [source,subs="attributes"]
 ----
@@ -221,12 +221,12 @@ window_end_hour := 14
 window_end_minute := 0
 ----
 
-Save the file. Now head over to AAP and configure it, we'll use the Demo Job Template again:
+Save the file. Configure AAP again using **Demo Job Template**:
 
-** Open the **Demo Job Template** for editing
-** Change the field **Policy enforcement** to `aap/maintenance`
-** Find the field **Labels**, type `maintenance` into it and hit **Enter**
-** **Save job template**
+. Open **Demo Job Template** for editing.
+. Set **Policy enforcement** to `aap/maintenance`.
+. In **Labels**, type `maintenance` and press kbd:[Enter].
+. Click btn:[Save job template].
 
 === Test the Policy
 
@@ -236,9 +236,9 @@ Since you have configured the current time to be inside our maintenance window a
 
 In the next step , remove the label again:
 
-. Open the **Demo Job Template** for editing
-. In the field **Labels**, hit the x on the label `maintenance` to remove it
-. **Save job template**
+. Open **Demo Job Template** for editing.
+. In **Labels**, remove the `maintenance` label using the remove control (x) beside it.
+. Click btn:[Save job template].
 
 You will be greeted by a policy violation:
 

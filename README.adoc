@@ -5,14 +5,14 @@
 
 == Quick Style Guide
 
-* Use numbered lists for instructions wherever possible
-* Follow https://docs.antora.org/antora-ui-default/ui-macro-styles/[Antora's UI macro styles^]
+* Use numbered lists for instructions that must be followed in order; use bullets for parallel items or general lists
+* Follow https://docs.antora.org/antora-ui-default/ui-macro-styles/[Antora UI macro styles,window=blank]
 ** Use `menu:MenuName[SubMenu > SubSubMenu]` for menu and navigation
 ** Use `btn:[ButtonName]` for UI buttons and similar
 ** Use `kbd:[KeyName]` for key strokes
 * Use **Bold** for field names and `Monospace` for field values in a dialog
-* Write https://asciidoctor.org/docs/asciidoc-recommended-practices/#one-sentence-per-line[one sentence per line^]
-* Add a caret at the end of external link names to  open them in a new tab or window e.g. `link:mylink[myname^]` (`window=blank` is an acceptable alternative)
+* Write https://asciidoctor.org/docs/asciidoc-recommended-practices/#one-sentence-per-line[one sentence per line,window=blank]
+* Open external links in a new tab using `link:url[Text,window=blank]` or `https://url[Text,window=blank]` (a trailing `^` on the link text is an acceptable alternative)
 
 == Nookbag Showroom Template
 

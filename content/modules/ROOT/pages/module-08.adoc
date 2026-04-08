@@ -1,6 +1,6 @@
 = The new Self-Service Automation Portal (SSAP)
 
-Starting with version 2.6, Ansible Automation Platform includes a brand new https://www.redhat.com/en/technologies/management/ansible/self-service-automation[self-service portal] based on https://www.redhat.com/en/technologies/cloud-computing/developer-hub[Red Hat Developer Hub] / https://backstage.io/[Backstage].
+Starting with version 2.6, Ansible Automation Platform includes a brand new https://www.redhat.com/en/technologies/management/ansible/self-service-automation[self-service portal,window=blank] based on https://www.redhat.com/en/technologies/cloud-computing/developer-hub[Red Hat Developer Hub,window=blank] / https://backstage.io/[Backstage,window=blank].
 At first only available to run on Red Hat OpenShift, it is available as a Red Hat Enterprise Linux-based appliance, too. 
 
 The General Availability is planned around Summit 2026 time frame.
@@ -19,36 +19,36 @@ Using the SSAP RHEL appliance, administrators will have to configure it and set 
 Most of this work has been done for you in this lab, only a few steps are required.
 First check that the OAuth application has been configured, this is needed because SSAP uses AAP for authentication.
 
-Access your AAP UI using the Showroom tab or by opening it in a browser tab {controller_url}[window=blank]. Login as user **lab-user** with the password **{controller_password}**. From there:
+Access your AAP UI from the **AAP** tab in Showroom, or open {controller_url}[Ansible Automation Platform,window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`. Then:
 
-** Go to menu:Access Management[OAuth Applications]
-** Open the OAuth application called `Selfservice-*****`
-** It should resemble this:
+. Open menu:Access Management[OAuth Applications].
+. Open the OAuth application named `Selfservice-*****`.
+. Confirm it looks like this:
 
 image::oauth-app.png[800,600,link=self,window=blank]
 
 You'll need to create a team called `aap-admins` belonging to the `Default` organization.
 
-. Go to menu:Access Management[Teams]
-. Press the blue button: **Create team**
+. Open menu:Access Management[Teams].
+. Click btn:[Create team].
 . Enter:
-** **Name:** aap-admins
-** **Organization:** Default
-. Press the blue button: **Create team**
+** **Name:** `aap-admins`
+** **Organization:** `Default`
+. Click btn:[Create team].
 
 We could create and add users to this new team but {controller_username} as system administrator is already implicitly member of the team (have a look at menu:Access Management[Users > {controller_username} > Teams]).
 
 == Configuring and Accessing SSAP
 
-In the next step, from a terminal as user `lab-user` access the SSAP appliance:
+From a terminal as `lab-user` on the bastion, connect to the SSAP appliance:
 
 ----
 ssh ssap
 ----
 
-** The SSAP appliance is configured using a text-based user interface
-** The configuration has already been created and just needs to be activated using the config tool
-** Run:
+. The SSAP appliance is configured with a text-based user interface.
+. The configuration file is already prepared; activate it with the setup tool.
+. Run:
 +
 [source,shell]
 ----
@@ -62,10 +62,10 @@ image::ssp-ready.png[800,600,link=self,window=blank]
 
 Access the SSP UI:
 
-** Go to {ssap_url}[window=blank], you will be asked to sign in using Ansible Automation Platform
-** Click the button: **Sign In**
-** You will be directed to AAP, log in as usual if you're not already (user `lab-user`, password `{controller_password}`)
-** Click: **Authorize** for Read and Write scope access
+. Open {ssap_url}[Self-Service Portal,window=blank]. Sign in with Ansible Automation Platform when prompted.
+. Click btn:[Sign In].
+. If directed to AAP, log in if needed as `{controller_username}` with password `{controller_password}`.
+. Click btn:[Authorize] for Read and Write scope access.
 
 You will be greeted by the shiny new SSP Portal! Since you are an admin user, you will see all **Job Templates** configured, but because you are not _the_ `admin` user, you can't do anything with it.
 Let's correct this!
@@ -75,17 +75,17 @@ Let's correct this!
 In a real world, you would give mostly others access to the portal.
 For sake of simplicity, we will give ourselves access rights to the templates, and the right to synchronize with AAP.
 
-. Select the lower left entry menu:Administration[RBAC].
-. Click in the upper right corner **Create** to... create a new role
-. Enter the **Name**: ssap_operators and click **Next**
-. Select the `AAP Administrators` (you're one of them) and click btn:[Next]
-. Select the `Catalog` and `Scaffolder` plugins, and select all permissions under each plugin.
-  The result should look as follows.
-  When done, press **Next**.
+. Select menu:Administration[RBAC] in the lower left.
+. Click btn:[Create] in the upper right.
+. Set **Name** to `ssap_operators` and click btn:[Next].
+. Select **AAP Administrators** (you are one of them) and click btn:[Next].
+. Select the **Catalog** and **Scaffolder** plugins and enable all permissions under each.
+The result should look as follows.
+When done, click btn:[Next].
 +
 image::ssap_permissions.png[link=self,window=blank]
 
-. Finally, press **Create**.
+. Click btn:[Create].
 
 Now, going back to the menu:Templates[] menu, you'll see that you can:
 
@@ -94,17 +94,17 @@ Now, going back to the menu:Templates[] menu, you'll see that you can:
 
 == Self-Service Portal synchronization with AAP
 
-"No description available" as template description isn't a great fit so let's fix this:
+`No description available` as the template description is not ideal, so fix it as follows:
 
-. Go to AAP, login if necessary
-. Select menu:Automation Execution[Templates]
-. Edit the `Demo Job Template`
-. Enter a menu:Description[] like 'Say hello to the world'
-. Press **Save job template**
-. Go back to the portal
-. Click on [.underline]#Sync now# in the upper left corner
-. Selecting the **Job templates** is sufficient, then press **Ok**
-. Refresh the browser page
+. Open AAP and log in if necessary.
+. Open menu:Automation Execution[Templates].
+. Edit **Demo Job Template**.
+. Set **Description** to `Say hello to the world`.
+. Click btn:[Save job template].
+. Return to the portal.
+. Click [.underline]#Sync now# in the upper left.
+. Select **Job templates** only, then click btn:[Ok].
+. Refresh the browser page.
 
 You should now see your new fancy description.
 
@@ -113,10 +113,10 @@ You should now see your new fancy description.
 Now that you know what the job template is supposed to do, you can use it.
 As it's the purpose of the portal, it's super simple to do:
 
-. Click **Start**.
-. While the job runs, you can **Cancel** it.
-. You can also use **Show Logs** to get a simplified version of the job log you know from AAP.
-. And once the job is finished, you can restart it with **Start Over**.
+. Click btn:[Start].
+. While the job runs, you can click btn:[Cancel].
+. Use btn:[Show Logs] for a simplified job log similar to AAP.
+. When the job has finished, you can click btn:[Start Over].
 
 == Custom Templates
 
@@ -129,18 +129,18 @@ Let´s go ahead and import a custom dynamic template.
 . Open the SSAP web UI
 . In the top right corner, click on btn:[Add Template].
 
-You will be prompted to **Select URL**. This will upload the custom dynamic template from a URL.
+You are prompted for **Select URL** to upload the custom dynamic template from a URL.
 
-Copy and paste the following URL into the Select URL field.
+Paste the following URL into the **Select URL** field:
 
 [source,shell,role=execute]
 ----
 https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml
 ----
 
-. Select Analyze to analyze the custom dynamic template.
-. You will see the Review details.
-. Click on Import to import the custom dynamic template.
+. Click btn:[Analyze] to analyze the custom dynamic template.
+. Review the details on the **Review** step.
+. Click btn:[Import] to import the custom dynamic template.
 
 image::add-ssap-template.png[link=self,window=blank]
 
@@ -148,7 +148,7 @@ You will now see the custom dynamic template in the Templates list with a title 
 
 image::ssap-show-custtemp.png[link=self,window=blank]
 
-Our custom template is backed by a Job Template in Ansible Automation Platform, of course. If you look at the URL of the https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml[yaml template you imported^] you will see the job template it is launching. In that yaml template there’s a section that looks like this:
+Our custom template is backed by a job template in Ansible Automation Platform. In the https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml[imported YAML template,window=blank], you can see which job template it launches. That file contains a section like this:
 
 [source,yaml]
 ----
