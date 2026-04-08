@@ -40,7 +40,7 @@ TIP: If you want to know what the Playbooks look like, check out the Git URL in 
 
 == Access the Automation Execution UI
 
-In your browser open {controller_url}[window=blank] (or click on the tab "AAP" on the right of this instructions) and login as user `{controller_username}` with the password `{controller_password}`.
+In your browser open {controller_url}[window=blank] (or click on the tab menu:AAP[] on the right of this instructions) and login as user `{controller_username}` with the password `{controller_password}`.
 
 == Configure the Workflow
 
@@ -50,17 +50,17 @@ In the Automation Execution section, go to the **Templates** resource and click 
 . Choose **Create workflow job template** and fill in as follows:
 +
 --
-** **Name:** Deploy Webapplication
-** **Organization:** Default
-** Click **Create workflow job template** at the bottom
+** **Name:** `Deploy Webapplication`
+** **Organization:** `Default`
+** Click btn:[Create workflow job template] at the bottom
 --
 +
-After saving the template the **Workflow Visualizer** opens to allow you to build a workflow. You can later open the **Workflow Visualizer** again by using the button labeled **Visualizer** on the template details page.
+After saving the template the **Workflow Visualizer** opens to allow you to build a workflow. You can later open the **Workflow Visualizer** again by using the button labeled btn:[Visualizer] on the template details page.
 
-. Click on the **Add step** button, a dialog to configure a new **workflow node** opens.
+. Click on the btn:[Add step] button, a dialog to configure a new **workflow node** opens.
 . First, select the node type **Job Template**
 . Choose the **Web Infra Deploy** Template
-. Click **Next** then **Finish**
+. Click btn:[Next] then btn:[Finish]
 
 You get into the **Workflow Visualizer** overview showing the first workflow node. The node gets annotated with the name of the job.
 
@@ -92,9 +92,11 @@ Click the **Launch workflow** button directly or go to the the **Templates** vie
 
 image::job_workflow.png[link=self,window=blank]
 
-Note how the workflow run is shown in the job view as a visual representation of the different workflow steps. Same as for a normal job template execution you can go to the **Details** tab to get more information.
+Note how the workflow run is shown in the job view as a visual representation of the different workflow steps.
+Same as for a normal job template execution you can go to the **Details** tab to get more information.
 
-If you want to look at the actual Jobs behind the workflow nodes, click the workflow node. If you want to get back from a details view to the corresponding workflow, just hit your browsers back button or click on **Source Workflow Job** in the job template details.
+If you want to look at the actual Jobs behind the workflow nodes, click the workflow node.
+If you want to get back from a details view to the corresponding workflow, just hit your browsers back button or click on **Source Workflow Job** in the job template details.
 
 After the job has finished, check if everything worked fine. To test the NodeJS application in your terminal, run:
 
