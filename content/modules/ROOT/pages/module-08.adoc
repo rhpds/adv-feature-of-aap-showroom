@@ -42,7 +42,7 @@ We could create and add users to this new team but {controller_username} as syst
 
 From a terminal as `lab-user` on the bastion, connect to the SSAP appliance:
 
-[source,shell]
+[source,shell,role=execute]
 ----
 ssh ssap
 ----
@@ -51,7 +51,7 @@ ssh ssap
 . The configuration file is already prepared; activate it with the setup tool.
 . Run:
 +
-[source,shell]
+[source,shell,role=execute]
 ----
 sudo portal-setup -c /tmp/portal.env -y
 ----
@@ -134,7 +134,7 @@ You are prompted for **Select URL** to upload the custom dynamic template from a
 
 Paste the following URL into the **Select URL** field:
 
-[source,shell,role=execute]
+[source,role=execute]
 ----
 https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml
 ----
