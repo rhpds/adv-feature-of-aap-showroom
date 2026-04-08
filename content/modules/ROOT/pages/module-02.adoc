@@ -19,8 +19,8 @@ For the next chapters we need a number of resources configured in AAP:
 
 - Static **Inventory** with two hosts
 - **Credentials**
-- Two **Projects**
-- Two **Job Templates**
+- Some **Projects**
+- A number of **Job Templates**
 
 This would involve a lot of error prone clicking in the web UI, so you'll use the pro way: a playbook was prepared upfront to save time, but you will still learn how to use Ansible to configure the Automation Execution part of AAP.
 

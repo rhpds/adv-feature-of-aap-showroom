@@ -7,8 +7,8 @@ Already know the basics of Red Hat Ansible Automation Platform and want more?
 NOTE: Since Ansible Automation Platform (AAP) 2.5, Automation Controller is now accessible through the automation execution interface in the new UI, providing the same capabilities.
 If you're familiar with previous versions of AAP, note that from now on, we will refer to _automation controller_ as _Automation Execution_ to align with the latest terminology.
 
-In this hands-on lab, we'll introduce you to some advanced capabilities of Automation Execution so you can benefit even more from using AAP.
-You'll learn how to:
+In this hands-on lab, we'll introduce you to some of the advanced capabilities of Automation Execution so you can benefit even more from using AAP.
+You will:
 
 * Configure automation execution resources with Ansible
 * Employ automation execution workflows so teams can collaborate more efficiently.
@@ -16,9 +16,10 @@ You'll learn how to:
 * Use dynamic inventories to scale your automation.
 * Get more flexibility with the constructed inventory feature.
 * Secure the automation supply chain with content signing that ensures only approved content runs in automation execution.
+* Get a sneak preview of the new Self-Service Automation Portal RHEL appliance
+* Be introduced to Policy Enforcement in AAP
 
 NOTE: This lab is ideal for anyone with basic Ansible Automation Platform experience looking to expand their automation skills.
-
 
 == Lab Infrastructure
 
@@ -28,6 +29,7 @@ Your lab includes a number of servers:
   You'll also use the command line there to do some Ansible development.
 - A one-node AAP cluster.
 - Two managed RHEL 9 hosts.
+- The Self-Service Portal RHEL appliance
 
 [TIP]
 ====
@@ -53,21 +55,25 @@ We call this user interface "Showroom" so don't wonder if you see this name here
 .Showroom navigation overview
 image::showroom.drawio.png[Showroom navigation overview,link=self,window=blank]
 
-The lab instructions are made of chapters, or exercises, which you should do in order, not forgetting steps as they might be relevant to following exercises.
+On the right side, there are different tabs providing access to the elements of your lab, described in more details in the next chapters. You may use the resizing handle in the middle to give more space to the environment or to the instructions.
 
-You can jump back to a specific chapter using the list in the top left corner.
-Each chapter has a title and a table of content, which might be located at the top of the instructions or as a separate menu to the right, depending on your browser width.
+TIP: You can also access the environment directly in separate browser tabs using the links provided. For the access details, check the xref:lab-access.adoc[Lab Access] section.
 
-On the right side, there are different tabs providing access to the elements of your lab, described in more details in the next chapter.
-You may use the resizing handle in the middle to give more space to the environment or to the instructions.
 
-TIP: If you don't see the right hand tabs in your environment, don't worry, you can also access the environment directly, as explained in the next chapter.
+== Lab Structure
+
+The lab instructions are divided into chapters, or exercises. The chapters cover a lot of ground and you might not be able to finish all of them in our limited timeframe or you already know some of the areas covered. To help you choose between chapters we have subdivided the content into three levels:
+
+* **Base**
+* **Intermediate**
+* **Expert**
+
+After finishing the **Base** level (because `Configure resources with Ansible` is a prerequisite for other chapters) you are free to choose chapters based on interest.
+
+WARNING: While forward-skipping chapters has been tested, jumping backwards has not, so your mileage might vary if you do... ;-)
+
 
 == Accessing your Lab Environment
-
-As hinted in the previous chapter, you can access most elements of the environment through the showroom tabs but you have the option to access the lab in separate browser tabs, too. For the access details, check the xref:lab-access.adoc[Lab Access] section.
-
-The following chapters explain in more details how to access the command line.
 
 === Using VS Code
 

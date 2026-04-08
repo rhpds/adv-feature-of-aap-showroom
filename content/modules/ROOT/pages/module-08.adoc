@@ -64,7 +64,7 @@ Access the SSP UI:
 
 ** Go to {ssap_url}[window=blank], you will be asked to sign in using Ansible Automation Platform
 ** Click the button: **Sign In**
-** You will be directed to AAP, log in as usual if you're not already
+** You will be directed to AAP, log in as usual if you're not already (user `lab-user`, password `{controller_password}`)
 ** Click: **Authorize** for Read and Write scope access
 
 You will be greeted by the shiny new SSP Portal! Since you are an admin user, you will see all **Job Templates** configured, but because you are not _the_ `admin` user, you can't do anything with it.
@@ -89,8 +89,8 @@ image::ssap_permissions.png[link=self,window=blank]
 
 Now, going back to the menu:Templates[] menu, you'll see that you can:
 
-A. Sync the templates to get modified and new ones from AAP
-B. Start the templates already available _if_ your user has this right in AAP as well
+* Sync the templates to get modified and new ones from AAP
+* Start the templates already available _if_ your user has this right in AAP as well
 
 == Self-Service Portal synchronization with AAP
 
@@ -108,7 +108,7 @@ B. Start the templates already available _if_ your user has this right in AAP as
 
 You should now see your new fancy description.
 
-== Execute a job
+== Execute a Job Template
 
 Now that you know what the job template is supposed to do, you can use it.
 As it's the purpose of the portal, it's super simple to do:
@@ -118,6 +118,65 @@ As it's the purpose of the portal, it's super simple to do:
 . You can also use **Show Logs** to get a simplified version of the job log you know from AAP.
 . And once the job is finished, you can restart it with **Start Over**.
 
+== Custom Templates
+
+But the main power of SSAP does come from the ability to use Custom dynamic templates. Custom Templates are templates that are stored in a Git repository and are imported into the Self-Service portal by an administrator. They are used to create new sophisticated, enterprise-ready templates that provide more advanced options than what surveys can offer.
+
+=== Import a Custom Template
+
+Let´s go ahead and import a custom dynamic template.
+
+. Open the SSAP web UI
+. In the top right corner, click on btn:[Add Template].
+
+You will be prompted to **Select URL**. This will upload the custom dynamic template from a URL.
+
+Copy and paste the following URL into the Select URL field.
+
+[source,shell,role=execute]
+----
+https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml
+----
+
+. Select Analyze to analyze the custom dynamic template.
+. You will see the Review details.
+. Click on Import to import the custom dynamic template.
+
+image::add-ssap-template.png[link=self,window=blank]
+
+You will now see the custom dynamic template in the Templates list with a title of "Manage RHEL Time Servers"
+
+image::ssap-show-custtemp.png[link=self,window=blank]
+
+Our custom template is backed by a Job Template in Ansible Automation Platform, of course. If you look at the URL of the https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml[yaml template you imported^] you will see the job template it is launching. In that yaml template there’s a section that looks like this:
+
+[source,yaml]
+----
+    - id: launch-job
+      name: Update Time Servers
+      action: rhaap:launch-job-template
+      input:
+        token: ${{ parameters.token }}
+        values:
+          template: RHEL / Update RHEL Time Servers
+          inventory: ${{ parameters.inventory }}
+----
+
+So the custom template `Manage RHEL Time Servers` is launching the job template `RHEL / Update RHEL Time Servers` in AAP. However the user will see many more options to choose from when they launch the custom template!
+
+TIP: BTW the job template `RHEL / Update RHEL Time Servers` is snake-oil, i.e. not doing anything but assisting to show the beauty of custom templates. You could of course configure RBAC in a way that a user would only see the custom template and not the job template in SSAP!
+
+=== Launch the Custom Dynamic Template
+
+Time to have a look...
+
+. Launch the custom template by clicking on the btn:[Start] button.
+. Examine the options available to the user.
+. Enable the **Show Advanced Options?** checkbox. Notice this provides many more options to the user.
+. Select the options you like. Then advance using btn:[Next] to the last step and click on btn:[Create] to run the custom dynamic template automation job.
+
+**As you can see, custom dynamic templates provide a lot of flexibility to the user.**
+
 == Conclusion
 
 In this chapter, you've learned how to:
@@ -125,3 +184,5 @@ In this chapter, you've learned how to:
 * Connect the Self-Service Automation Portal to AAP
 * Configure access rights in the portal
 * Synchronize and start job templates using the portal
+* What custom dynamic templates are
+* How to import and use custom templates
