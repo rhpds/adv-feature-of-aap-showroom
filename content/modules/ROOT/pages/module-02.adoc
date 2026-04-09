@@ -121,3 +121,7 @@ Since automation controller stores the SSH key encrypted, the Ansible Module is 
 This is what we want and expect from a secure system, but it also means Ansible has no means to verify it and hence overrides the SSH key or password every time the Ansible Playbook is executed.
 This can be overridden with the `update_secrets` parameter.
 Also note that the `credential_type` value is simply the type's name.
+
+== Conclusion
+
+The Red Hat Ansible Automation Platform is developed following the "API first" model allowing all aspects of the system to be automatically configured and managed by using the API. This also allows us to "automate the automation" and use Ansible to fully configure it.

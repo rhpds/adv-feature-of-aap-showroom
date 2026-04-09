@@ -108,3 +108,7 @@ curl http://{node1_hostname}/nodejs
 ----
 
 You should be greeted with a friendly `Hello World`. Well done!
+
+== Conclusion
+
+Workflows are a great way to build cross team and cross department automation, giving you the capability to built end to end automated processes.

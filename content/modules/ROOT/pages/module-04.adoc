@@ -22,7 +22,7 @@ IMPORTANT: If you've _skipped_ any of the previous chapters, run `cd ~/playbooks
 Surveys can be used to define forms which ask the user for variable values before running a job.
 The `Hello World!` string the NodeJS application prints is defined in the https://gitlab.com/ansible-labs-crew/playbooks-dev/-/raw/master/install_node_app.yml[install_node_app playbook,window=blank] in the variable `content`.
 
-TIP: If you have been logged out or log in for the first time, refer to the xref:lab-access.adoc[Lab Access] page for the access details.
+Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}[window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`.
 
 So we just need to add a survey to our **Deploy Webapplication** workflow template.
 In the AAP UI, open menu:Automation Execution[Templates > Deploy Webapplication], then:

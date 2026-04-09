@@ -117,7 +117,7 @@ What it basically does is to return the data collected by curl when called with 
 
 But before we integrate the custom inventory plugin into our automation execution, it’s a good idea to test it on the command line:
 
-. Bring up your *VS Code Server* browser tab; Log in with password `{controller_password}`.
+. Bring up your *VS Code Server* browser tab; Log in with password `{controller_password}`, if you've been logged out or never logged in before.
 . In either the visual editor or in the terminal using your favorite command-line editor, create the file `/home/{ssh_username}/dyninv.sh` with the content of the Bash script shown above.
 
 TIP: Create the script in `/home/{ssh_username}/`.
@@ -148,6 +148,8 @@ In Ansible Tower up to version 3.8, you could create inventory scripts directly 
 
 For this lab the inventory script was already created in the Git repository you have configured as a *Project* earlier, so you can use this as-is.
 
+Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}[window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`
+
 You can directly proceed to adding the dynamic inventory and pointing it to the inventory script.
 
 . In the AAP web UI, open menu:Automation Execution[Infrastructure > Inventories].
@@ -175,7 +177,7 @@ Open menu:Automation Execution[Jobs] to watch the initial sync; **Type** is `Inv
 After the inventory sync has finished, open menu:Automation Execution[Infrastructure > Hosts] and review the new hosts added to the **Cloud inventory**.
 You should see hosts matching the JSON output above.
 
-== What is the take-away?
+== Conclusion
 
 Using this simple example you have:
 
