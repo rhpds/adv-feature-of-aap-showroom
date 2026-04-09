@@ -12,6 +12,8 @@ IMPORTANT: If you've _skipped_ any of the previous chapters, call `cd ~/playbook
 
 Let's create our first constructed inventory by opening menu:Automation Execution[Infrastructure > Inventories].
 
+TIP: If you have been logged out or log in for the first time, refer to the xref:lab-access.adoc[Lab Access] page for the access details.
+
 . Create a new inventory: click btn:[Create inventory], then choose **Create constructed inventory**.
 ** **Name:** `Constructed Inventory`
 ** **Organization:** `Default`

@@ -45,7 +45,9 @@ In your browser open {controller_url}[Ansible Automation Platform,window=blank] 
 == Configure the Workflow
 
 Now, you set up the Workflow to bring together the work of the two teams.
-Open menu:Automation Execution[Templates] and click btn:[Create template].
+
+
+. Open menu:Automation Execution[Templates] and click btn:[Create template].
 
 . Choose **Create workflow job template** and fill in as follows:
 +
@@ -55,7 +57,7 @@ Open menu:Automation Execution[Templates] and click btn:[Create template].
 ** Click btn:[Create workflow job template] at the bottom
 --
 +
-After saving the template the **Workflow Visualizer** opens to allow you to build a workflow. You can later open the **Workflow Visualizer** again by using the button labeled btn:[Visualizer] on the template details page.
+After saving the template the **Workflow Visualizer** opens to allow you to build a workflow. You can later open the **Workflow Visualizer** again by using the button labeled btn:[View workflow visualizer] on the template details page.
 
 . Click on the btn:[Add step] button, a dialog to configure a new **workflow node** opens.
 . First, select the node type **Job Template**
@@ -70,11 +72,11 @@ image:workflow-node-edit.png[width="80",height="200",float="right",link=self,win
 ** **Add step and link** to add new workflow node
 ** and a **Remove step** to delete current workflow node.
 
-. We want to add another workflow node, so click the **Add step and link** sign
+. We want to add another workflow node, so click the **Add step and link** icon
 . Choose **Web App Deploy** as the next Job Template.
 . The **Status** field sets the condition under which the next node is executed, select **Run on success**
 +
-TIP: The Status field allows for more complex workflows. You could lay out different execution paths for successful and for failed Playbook runs.
+TIP: The **Status** field allows for more complex workflows. You could lay out different execution paths for successful and for failed Playbook runs.
 
 . Click btn:[Next] then btn:[Finish]
 +
@@ -82,7 +84,7 @@ Your workflow should look like this:
 +
 image::webapplication-workflow.png[Workflow deploying Web Infra and App,link=self,window=blank]
 
-. Back in the main **Workflow Visualizer** view, click btn:[Save] in the upper left to save the Workflow Template.
+. Back in the main **Workflow Visualizer** view, click btn:[Save] in the upper left to save the Workflow Template. You also might have to close the visualizer by clicking on the respective icon.
 
 == And Action!
 
@@ -93,7 +95,7 @@ Click btn:[Launch workflow] on the workflow template, or open menu:Automation Ex
 image::job_workflow.png[link=self,window=blank]
 
 Note how the workflow run is shown in the job view as a visual representation of the different workflow steps.
-Same as for a normal job template execution you can go to the **Details** tab to get more information.
+Like a normal job template execution you can go to the **Details** tab to get more information.
 
 If you want to look at the actual Jobs behind the workflow nodes, click the workflow node.
 If you want to get back from a details view to the corresponding workflow, just hit your browsers back button or click on **Source Workflow Job** in the job template details.

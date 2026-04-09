@@ -1,7 +1,7 @@
 = The new Self-Service Automation Portal (SSAP)
 
 Starting with version 2.6, Ansible Automation Platform includes a brand new https://www.redhat.com/en/technologies/management/ansible/self-service-automation[self-service portal,window=blank] based on https://www.redhat.com/en/technologies/cloud-computing/developer-hub[Red Hat Developer Hub,window=blank] / https://backstage.io/[Backstage,window=blank].
-At first only available to run on Red Hat OpenShift, it is available as a Red Hat Enterprise Linux-based appliance, too. 
+At first only available to run on Red Hat OpenShift, it is available as a Red Hat Enterprise Linux-based appliance, too.
 
 The General Availability is planned around Summit 2026 time frame.
 But since we wanted to give you a sneak peak into it already, we included a lab chapter based on the Developer Preview version.

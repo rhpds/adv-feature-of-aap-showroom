@@ -22,7 +22,7 @@ Look around, to the right in the UI you'll see a list of repositories, click the
 
 === Clone the repository
 
-Next, you need the repository from Gitea in your home directory on the bastion host. As you have already cloned this repo in the first chapter it should already exist. To check, in your VS Code terminal run `ls -l ~`, which should output something like:
+Next, you need the repository from Gitea in your home directory on the bastion host. As you have already cloned this repo in the first chapter it should already exist. To check, in your **VS Code Server** terminal run `ls -l ~`, which should output something like:
 
 [source,console,subs="attributes"]
 ----
@@ -193,7 +193,7 @@ $ sudo dnf install ansible-sign -y
 Updating Subscription Management repositories.
 [... MANY MORE LINES ...]
 Installed:
-  ansible-sign-0.1.1-2.el9ap.noarch  python3.11-distlib-0.3.8-1.el9ap.noarch  python3.11-gnupg-0.5.2-1.el9ap.noarch 
+  ansible-sign-0.1.1-2.el9ap.noarch  python3.11-distlib-0.3.8-1.el9ap.noarch  python3.11-gnupg-0.5.2-1.el9ap.noarch
 
 Complete!
 $ vi /home/lab-user/playbooks-adv-controller/MANIFEST.in
@@ -247,7 +247,7 @@ Push the new files to your Git repository server:
 git push
 ----
 
-VS Code will open a _small_ dialog at the top of the window asking for username and password, else git in the terminal will simply ask for username and password.
+**VS Code Server** will open a _small_ dialog at the top of the window asking for username and password, else git in the terminal will simply ask for username and password.
 In both cases, enter `{gitea_username}` respectively `{gitea_password}`.
 
 image::vscode-git-login.png[800,600,link=self,window=blank]
@@ -255,6 +255,8 @@ image::vscode-git-login.png[800,600,link=self,window=blank]
 == Setup Automation Execution
 
 Now, we have to configure our automation execution to use and verify our signed content.
+
+TIP: If you have been logged out or log in for the first time, refer to the xref:lab-access.adoc[Lab Access] page for the access details.
 
 === Create Credential with signing public key
 
@@ -330,7 +332,7 @@ Above tasks indicate that the signature validation was successful.
 
 The last step in this lab is to check, if automation controller picks up if the content has been changed without re-signing it, indicating somebody has tampered with the content.
 
-Open the file `/home/{ssh_username}/{gitea_controller_project}/apache_install.yml` in your VS Code and change something, like set `enabled: false`.
+Open the file `/home/{ssh_username}/{gitea_controller_project}/apache_install.yml` in your **VS Code Server** and change something, like set `enabled: false`.
 
 Push the new version to the Git repository:
 
@@ -341,7 +343,7 @@ git commit -m "changing file"
 git push
 ----
 
-VS Code will again open a _small_ dialog at the top of the window asking for username and password, or git in the terminal will ask for the same information.
+**VS Code Server** will again open a _small_ dialog at the top of the window asking for username and password, or git in the terminal will ask for the same information.
 In both cases, enter `{gitea_username}` respectively `{gitea_password}`.
 
 If this change was legit, you would have re-signed the repository content. This way automation controller should recognize the signature of the file is not valid anymore and fail the repository sync. Give it a try:
@@ -361,4 +363,4 @@ TASK [Verify project content against checksum manifest] ************************
 fatal: [localhost]: FAILED! => {"changed": false, "msg": "Checksum mismatch: apache_install.yml"}
 ----
 
-We changed a signed file and skipped signing it again to see the result in automation execution. The verification failed and the output shows which files were not signed in the Project. 
+We changed a signed file and skipped signing it again to see the result in automation execution. The verification failed and the output shows which files were not signed in the Project.

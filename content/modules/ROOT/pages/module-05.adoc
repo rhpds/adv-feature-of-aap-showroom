@@ -17,8 +17,8 @@ In this chapter you’ll get started with custom dynamic inventory _scripts_.
 Among all the available programming languages we have chosen one of the most accessible and known: Bash! Yes!
 
 IMPORTANT: Don’t get this wrong... we’ve chosen to use Bash to make it as simple as possible to show the concepts behind dynamic and custom inventories.
-Our recommendation in real life remains to use Python to write your dynamic inventory _plugins_ (not scripts!), and profit from libraries, documentation and examples written in the same language.
-And actually you should even place the inventory plugin in a collection and use it as part of this collection added to an Execution Environment loaded into the automation execution.
+Our recommendation in real life remains to use Python to write your dynamic inventory _plugins_ (not scripts!), and benefit from libraries, documentation and examples written in the same language.
+And actually you should even place the inventory plugin in a collection and execute it from an Execution Environment loaded into the provided by private automation hub.
 But this approach would have been too involved for this lab, so here you are: Bash!
 
 == The Inventory Source
@@ -96,7 +96,7 @@ NOTE: Okay, seriously, in real life your plugin would likely get some informatio
 
 == The Custom Inventory Script
 
-An inventory script (and plugins, too) has to follow some conventions. It must accept the *`--list`* and *`--host <hostname>`* arguments. When it is called with *`--list`*, the script must output JSON-encoded data containing all groups and hosts to be managed. When called with *`--host <hostname>`* it must return an JSON-formatted hash or dictionary of host variables (can be empty) for this particular host.
+An inventory script (and plugins, too) has to follow some conventions. It must accept the *`--list`* and *`--host <hostname>`* arguments. When it is called with *`--list`*, the script must output JSON-encoded data containing all groups and hosts to be automated. When called with *`--host <hostname>`* it must return an JSON-formatted hash or dictionary of host variables (can be empty) for the specified host.
 
 As looping over all hosts and calling the script with *`--host`* can be pretty slow, it is possible to return a top level element called *`_meta`* with all host variables together with the output of *`--list`* in one run. And this is what we’ll do. So this is our custom inventory script:
 
@@ -117,7 +117,7 @@ What it basically does is to return the data collected by curl when called with 
 
 But before we integrate the custom inventory plugin into our automation execution, it’s a good idea to test it on the command line:
 
-. Bring up your VS Code browser tab; see xref:lab-access.adoc[Lab Access] if the tab was closed.
+. Bring up your *VS Code Server* browser tab; Log in with password `{controller_password}`.
 . In either the visual editor or in the terminal using your favorite command-line editor, create the file `/home/{ssh_username}/dyninv.sh` with the content of the Bash script shown above.
 
 TIP: Create the script in `/home/{ssh_username}/`.

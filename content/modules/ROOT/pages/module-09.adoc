@@ -7,7 +7,7 @@ This chapter explores Ansible Automation Platform Policy Enforcement — the pra
 **Enforce policies to keep AI in check**
 We are entering the era of AIOps, this basically means infusing AI inferences into automated IT actions.
 You need to ensure that your AI-driven automation will function within the boundaries of internal and external policies.
-With Ansible Automation Platform, you can enforce policies at automation runtime to ensure each AIOps action stays within boundaries. 
+With Ansible Automation Platform, you can enforce policies at automation runtime to ensure each AIOps action stays within boundaries.
 ====
 
 == Policy Enforcement in AAP
@@ -38,7 +38,7 @@ If you have not already, log in to menu:Codeserver[] (password `{vscode_server_p
 
 The first step is the Rego policies. A set of policies is prepared for you; clone the repository on the bastion host and copy the policies into the OPA server policy directory:
 
-In your VS Code terminal (or SSH session) run:
+In your **VS Code Server** terminal (or SSH session) run:
 
 [source,shell,role=execute,subs="attributes"]
 ----
@@ -47,7 +47,7 @@ git clone {gitea_url}/{gitea_username}/opa-policy-enforcement.git
 cp opa-policy-enforcement/* /var/lib/opa/policies/
 ----
 
-Copying the policies to the policy directory of the OPA server makes them available immediately. 
+Copying the policies to the policy directory of the OPA server makes them available immediately.
 
 == Configuring AAP for Policy Enforcement
 
@@ -66,7 +66,7 @@ package aap.deny
 
 import rego.v1
 
-deny := { 
+deny := {
   "allowed": false,
   "violations": ["No job execution is allowed"]
 }
@@ -163,7 +163,7 @@ If the input doesn't match the allowed input it will deny the Template run. Let'
 
 === Test the Policy
 
-What do you think will happen? Launch the Job Template and let's see... 
+What do you think will happen? Launch the Job Template and let's see...
 
 [source,subs="attributes"]
 ----
@@ -185,7 +185,7 @@ environment: test
 
 == Maintenance Window Policy
 
-Here is another real-world example dealing with maintenance windows. Companies often have a certain time window where system maintenance like updates can happen. To make sure no conflicting automation is running, e.g. reconfiguration of an application, it would be very helpful to not allow running automation jobs other then the ones needed for maintenance. 
+Here is another real-world example dealing with maintenance windows. Companies often have a certain time window where system maintenance like updates can happen. To make sure no conflicting automation is running, e.g. reconfiguration of an application, it would be very helpful to not allow running automation jobs other then the ones needed for maintenance.
 
 Here our policy `maintenance_window.rego` comes to the rescue:
 
@@ -198,15 +198,15 @@ Here our policy `maintenance_window.rego` comes to the rescue:
 The policy file has already been copied to the policy directory. To place the current time inside the configured window:
 
 . Run `date -u` in your terminal to get the current UTC time.
-. Open `/var/lib/opa/policies/maintenance_window.rego` in VS Code or your editor.
+. Open `/var/lib/opa/policies/maintenance_window.rego` in **VS Code Server** or your editor.
 . Find the block with the time values:
 
 [source,subs="attributes"]
 ----
 # Window is [start, end) — includes start, excludes end (02:00–04:00 means 02:00 up to 03:59:59)
-window_start_hour := 9 
+window_start_hour := 9
 window_start_minute := 0
-window_end_hour := 11 
+window_end_hour := 11
 window_end_minute := 0
 ----
 
@@ -215,9 +215,9 @@ Take the output of the `date` command and define a time window where it would fa
 [source,subs="attributes"]
 ----
 # Window is [start, end) — includes start, excludes end (02:00–04:00 means 02:00 up to 03:59:59)
-window_start_hour := 12 
+window_start_hour := 12
 window_start_minute := 0
-window_end_hour := 14 
+window_end_hour := 14
 window_end_minute := 0
 ----
 
@@ -261,7 +261,7 @@ This job cannot be executed due to a policy violation or error. See the followin
 'between 01:00 and 02:00 (UTC).']}}
 ----
 
-As expected the maintenance Job is not allowed to run outside the maintenance window. 
+As expected the maintenance Job is not allowed to run outside the maintenance window.
 
 == Conclusion
 

@@ -10,6 +10,7 @@
 ** Use `menu:MenuName[SubMenu > SubSubMenu]` for menu, tabs and navigation
 ** Use `btn:[ButtonName]` for UI buttons and similar
 ** Use `kbd:[KeyName]` for key strokes
+* Use `back ticks` for commands, for example `sudo` or `ansible-navigator`
 * Use **Bold** for field names and `Monospace` for field values in a dialog
 * Write https://asciidoctor.org/docs/asciidoc-recommended-practices/#one-sentence-per-line[one sentence per line,window=blank]
 * Open external links in a new tab using `link:url[Text,window=blank]` or `https://url[Text,window=blank]` (a trailing `^` on the link text is an acceptable alternative).

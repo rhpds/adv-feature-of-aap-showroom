@@ -6,7 +6,7 @@ There are different survey fields including drop down lists, password fields, or
 == The Scenario
 
 The App and Ops teams are quite happy with how you setup the workflow to combine both teams' Ansible content into one automation job.
-But something else came up, as the app team has a new Night Shift member.
+But something else came up, as the app team has a new night shift member.
 They would like to allow this new member to:
 
 * Change the content of the website NodeJS is serving
@@ -15,14 +15,14 @@ They would like to allow this new member to:
 However, the new team member should not be allowed to change anything else in AAP for now.
 Sounds like a job for Automation Execution **Surveys** and Ansible Automation Platform **Role Based Access Control**!
 
-IMPORTANT: If you've _skipped_ any of the previous chapters, call `cd ~/playbooks-adv-controller && ansible-navigator run add-workflow-template.yml` in a terminal to set the pre-requisites for the next steps.
+IMPORTANT: If you've _skipped_ any of the previous chapters, run `cd ~/playbooks-adv-controller && ansible-navigator run add-workflow-template.yml` in a terminal to set the pre-requisites for the next steps.
 
 == Add the survey
 
-Surveys allow to define the content of variables before running a job.
+Surveys can be used to define forms which ask the user for variable values before running a job.
 The `Hello World!` string the NodeJS application prints is defined in the https://gitlab.com/ansible-labs-crew/playbooks-dev/-/raw/master/install_node_app.yml[install_node_app playbook,window=blank] in the variable `content`.
 
-TIP: If the AAP UI is not open anymore, refer to the xref:lab-access.adoc[Lab Access] page for the access details.
+TIP: If you have been logged out or log in for the first time, refer to the xref:lab-access.adoc[Lab Access] page for the access details.
 
 So we just need to add a survey to our **Deploy Webapplication** workflow template.
 In the AAP UI, open menu:Automation Execution[Templates > Deploy Webapplication], then:
@@ -50,7 +50,7 @@ TIP: Note how the survey content is shown on the **Details** tab of the Job view
 From an Ansible perspective they are actually nothing else than extra variables.
 
 After the job has completed, check the result.
-In your **VS Code** terminal, run again:
+In your **VS Code Server** terminal, run again:
 
 [subs="attributes",source,bash,role=execute]
 ----
@@ -61,7 +61,7 @@ The string returned should match what you entered in the survey.
 
 == Create a restricted user
 
-The second part of your task is to add the new Night Shift user who is only allowed to execute the **Deploy Webapplication** Workflow, but nothing else.
+The second part of your task is to add the new night shift user who is only allowed to execute the **Deploy Webapplication** Workflow, but nothing else.
 For this you have to leverage the RBAC (Role Base Access Control) features of AAP.
 
 === Create Role
@@ -71,13 +71,13 @@ Automation Execution (aka controller) is only one of those services.
 For this reason, open menu:Access Management[Roles].
 
 First filter on `Workflow`.
-You can verify that no built-in role allows to execute _and_ approve a workflow, without being able to modify or delete them.
+You can verify that no built-in role allows to execute and approve a workflow, without being able to modify or delete them.
 To do so, click on the small arrow head next to the tick box on the left of each role to drop down the actual permissions.
 
 .Filter Workflow roles
 image::role-workflow-filter.drawio.png[Filter Workflow roles,link=self,window=blank]
 
-The Night Shift personal though is alone at night and they need to be able to circumvent approval steps or they might not be able to do their job.
+The night shift personal though is alone at night and they need to be able to circumvent approval steps or they might not be able to do their job.
 
 NOTE: For sake of simplicity and time, our workflow doesn't have an approval step.
 Feel free to add one between the two steps if you happen to have time left at the end of the session.
@@ -95,7 +95,7 @@ So we decide to create our own role for them:
 *** [x] Can view workflow job template
 . Click btn:[Create role].
 
-Back to Automation Execution Roles and again filtering on "Workflow", you can easily see that our new role is "Editable" and not "Built-in".
+Back to Automation Execution Roles and again filtering on "Workflow", you can easily see that our new role is "Editable" and not "Built-in" Note the pen icon for built-in roles is greyed out, while for the new one we just created it's bold and active.
 
 === Create User
 
@@ -161,7 +161,7 @@ If you open menu:Automation Execution[Templates], select **Deploy Webapplication
 
 == Test the restricted user
 
-You've now setup the required user and permissions.
+You've now set up the required user and permissions.
 To test everything, log out of the AAP web UI and log in again as `nightshift` with password `{controller_password}`.
 
 . Open menu:Automation Execution[Templates].
