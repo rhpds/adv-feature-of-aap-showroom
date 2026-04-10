@@ -14,7 +14,7 @@ This enables new ways for teams to collaborate e.g. the application team creates
 == The Scenario
 
 Assume you have two teams in your organization.
-Each team is managing their respective content in their own Git repository:
+Each team is managing their respective content in their own git repository:
 
 * The web operations team is creating playbooks to deploy web _infrastructures_
 * The web applications team is developing JavaScript web applications for NodeJS
@@ -36,7 +36,7 @@ As you ran the Playbook during the xref:module-02.adoc[Configure Ansible Automat
 * Two Git repositories were setup as Projects `Webdev Git Repo` and `Webops Git Repo`
 * Playbooks were configured as Job Templates `Web App Deploy` and `Web Infra Deploy`
 
-TIP: If you want to know what the Playbooks look like, check out the Git URL in the Projects.
+TIP: If you want to know what the Playbooks look like, check out the git URL in the Projects.
 
 == Access the Automation Execution UI
 

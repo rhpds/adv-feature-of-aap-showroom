@@ -146,7 +146,7 @@ So, now you have a source of a (slightly static) dynamic inventory (talk about a
 
 In Ansible Tower up to version 3.8, you could create inventory scripts directly in the web UI. Since automation controller 4.0 (aka AAP 2.0) the only way to get inventory scripts into Automation Execution is by putting the script into a source control repository.
 
-For this lab the inventory script was already created in the Git repository you have configured as a *Project* earlier, so you can use this as-is.
+For this lab the inventory script was already created in the git repository you have configured as a *Project* earlier, so you can use this as-is.
 
 Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}[window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`
 

@@ -93,7 +93,7 @@ Tasks:
 +
 TIP: SSH keys have already been created and distributed in your lab environment and `sudo` has been setup on the managed hosts to allow password-less login. When you SSH into a host as a regular user from the bastion node you will become user **lab-user** on the host you logged in.
 
-* **Create Projects**: different projects are created based on public Git repos which we have synced to your environment (check how we define the scm variable if you're interested in the details).
+* **Create Projects**: different projects are created based on public git repos which we have synced to your environment (check how we define the scm variable if you're interested in the details).
 
 * **Create Web Infra and Dev Templates**: and finally two job templates are created based on the previously added elements (the trinity inventory, credential and project).
 

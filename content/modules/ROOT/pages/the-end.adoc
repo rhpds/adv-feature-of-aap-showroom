@@ -30,7 +30,7 @@ With some adaptation, you should then be able to follow most of the https://rhpd
 NOTE: The term "generic" means that hostnames, users and passwords are not adapted to your environment and are only placeholders.
 It'll be up to you to apply the right values while reading the guide.
 
-The Git repositories we use in this lab are also freely available:
+The git repositories we use in this lab are also freely available:
 
 Lab Project Repo:: https://gitlab.com/ansible-labs-crew/playbooks-adv-controller-2025.git[playbooks-adv-controller-2025,window=blank]
 Webdev Git Repo:: https://gitlab.com/ansible-labs-crew/playbooks-dev.git[playbooks-dev,window=blank]

@@ -16,14 +16,16 @@ Self-service automation portal uses your existing Ansible Automation Platform se
 == Preparing AAP
 
 Using the SSAP RHEL appliance, administrators will have to configure it and set up tokens and OAuth in Ansible Automation Platform.
-Most of this work has been done for you in this lab, only a few steps are required.
+
+NOTE: Most of this work has been done for you in this lab, only a few steps are required.
+
 First check that the OAuth application has been configured, this is needed because SSAP uses AAP for authentication.
 
 Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}[window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`. Then:
 
 . Open menu:Access Management[OAuth Applications].
-. Open the OAuth application named `Selfservice-*****`.
-. Confirm it looks like this:
+. Open the OAuth application named `Selfservice`.
+. **Confirm** it looks like this:
 +
 image::oauth-app.png[800,600,link=self,window=blank]
 
@@ -38,28 +40,7 @@ You'll need to create a team called `aap-admins` belonging to the `Default` orga
 
 We could create and add users to this new team but {controller_username} as system administrator is already implicitly member of the team (have a look at menu:Access Management[Users > {controller_username} > Teams]).
 
-== Configuring and Accessing SSAP
-
-From a terminal as `lab-user` on the bastion, connect to the SSAP appliance:
-
-[source,shell]
-----
-ssh ssap
-----
-
-. The SSAP appliance is configured with a text-based user interface.
-. The configuration file is already prepared; activate it with the setup tool.
-. Run:
-+
-[source,shell]
-----
-sudo portal-setup -c /tmp/portal.env -y
-----
-
-Configuring the Portal will take a couple of minutes.
-When you are finally greeted with this screen, your Self-Service Portal is ready to go:
-
-image::ssp-ready.png[800,600,link=self,window=blank]
+== Accessing SSAP
 
 Access the SSP UI:
 
@@ -73,13 +54,13 @@ Let's correct this!
 
 == Role Based Access Control
 
-In a real world, you would give mostly others access to the portal.
+In a real world, you would give mostly others access to the portal. For example, the service portal can be very helpful for less technical audiences who don't have to understand how Ansible works and just start the automation.
 For sake of simplicity, we will give ourselves access rights to the templates, and the right to synchronize with AAP.
 
 . Select menu:Administration[RBAC] in the lower left.
 . Click btn:[Create] in the upper right.
 . Set **Name** to `ssap_operators` and click btn:[Next].
-. Select **AAP Administrators** (you are one of them) and click btn:[Next].
+. Select **AAP Administrators** in the **Add users and groups** screen of the wizard (you are one of them) and click btn:[Next].
 . Select the **Catalog** and **Scaffolder** plugins and enable all permissions under each.
 The result should look as follows.
 When done, click btn:[Next].
@@ -114,14 +95,14 @@ You should now see your new fancy description.
 Now that you know what the job template is supposed to do, you can use it.
 As it's the purpose of the portal, it's super simple to do:
 
-. Click btn:[Start].
+. Click btn:[Start] next to the **Demo Job Template**.
 . While the job runs, you can click btn:[Cancel].
 . Use btn:[Show Logs] for a simplified job log similar to AAP.
 . When the job has finished, you can click btn:[Start Over].
 
 == Custom Templates
 
-But the main power of SSAP does come from the ability to use Custom dynamic templates. Custom Templates are templates that are stored in a Git repository and are imported into the Self-Service portal by an administrator. They are used to create new sophisticated, enterprise-ready templates that provide more advanced options than what surveys can offer.
+The main power of SSAP does come from the ability to use Custom dynamic templates. Custom Templates are templates that are stored in a git repository and are imported into the Self-Service portal by an administrator. They are used to create new sophisticated, enterprise-ready templates that provide more advanced options than what surveys can offer.
 
 === Import a Custom Template
 
@@ -187,3 +168,5 @@ In this chapter, you've learned how to:
 * Synchronize and start job templates using the portal
 * What custom dynamic templates are
 * How to import and use custom templates
+
+The Self-Server Portal gives you much more capabilities in designing a catalog for less technical users and to simplify and improve the user experience.
