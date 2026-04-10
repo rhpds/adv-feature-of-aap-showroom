@@ -6,7 +6,7 @@ You might remember the concept of Smart Inventories. They allowed us to create i
 
 Therefore, the concept of smart inventories, although still available in automation execution, is deprecated and replaced by constructed inventories. They are far more flexible and of course, they maintain the group membership information of your hosts.
 
-IMPORTANT: If you've _skipped_ any of the previous chapters, call `cd ~/playbooks-adv-controller && ansible-navigator run add-dyn-inventory.yml` in a terminal to set the pre-requisites for the next steps.
+IMPORTANT: If you've _skipped_ any of the previous chapters, run `cd ~/playbooks-adv-controller && ansible-navigator run add-dyn-inventory.yml` in a terminal to set the pre-requisites for the next steps.
 
 == Create a basis
 
