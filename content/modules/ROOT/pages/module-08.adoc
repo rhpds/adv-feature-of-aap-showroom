@@ -115,7 +115,7 @@ You are prompted for **Select URL** to upload the custom dynamic template from a
 
 Paste the following URL into the **Select URL** field:
 
-[source,shell,role=execute]
+[source,role=execute]
 ----
 https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml
 ----
