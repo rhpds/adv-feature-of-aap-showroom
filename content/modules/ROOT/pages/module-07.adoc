@@ -63,7 +63,7 @@ The public key will be used in automation controller to verify signatures later 
 
 === Prepare GPG
 
-First we have to create the keys we'll use with GPG. Create the file `/home/{bastion_ssh_user_name}/gpg.txt` using your favorite editor with the following content:
+First we have to create the keys we'll use with GPG. Create the file `/home/{ssh_username}/gpg.txt` using your favorite editor with the following content:
 
 [source,properties,role=execute]
 ----
@@ -162,7 +162,7 @@ Now that we have prepared the signing keys let's sign our `{gitea_controller_pro
 sudo dnf install ansible-sign -y
 ----
 
-The first step toward signing content is to create a file that tells `ansible-sign` which files to protect. This file should be called `MANIFEST.in` and reside in the project root directory. So go ahead and create the file `/home/{bastion_ssh_user_name}/{gitea_controller_project}/MANIFEST.in` using your favorite editor with the following content:
+The first step toward signing content is to create a file that tells `ansible-sign` which files to protect. This file should be called `MANIFEST.in` and reside in the project root directory. So go ahead and create the file `/home/{ssh_username}/{gitea_controller_project}/MANIFEST.in` using your favorite editor with the following content:
 
 [source,shell,role=execute,subs="attributes"]
 ----
@@ -179,7 +179,7 @@ In this case we just include every file in the repository root that matches `*.y
 
 [source,shell,role=execute,subs="attributes"]
 ----
-ansible-sign project gpg-sign /home/{bastion_ssh_user_name}/{gitea_controller_project}
+ansible-sign project gpg-sign /home/{ssh_username}/{gitea_controller_project}
 ----
 
 The above command tells the `ansible-sign` tool to gpg-sign the `{gitea_controller_project}` project locally.
@@ -188,7 +188,7 @@ Once you run the command, you will see that the GPG signing was successful and y
 
 [source,shell,role=execute,subs=attributes]
 ----
-head -n-0 /home/{bastion_ssh_user_name}/{gitea_controller_project}/.ansible-sign/sha256sum.*
+head -n-0 /home/{ssh_username}/{gitea_controller_project}/.ansible-sign/sha256sum.*
 ----
 
 `ansible-sign` created a file with the checksums of the files listed in `MANIFEST.in` and another file with the signature of this file.
@@ -285,7 +285,8 @@ In the web UI, open menu:Automation Execution[Infrastructure > Credentials].
 
 . Click btn:[Create Credential].
 . Set:
-** **Name:** `ansible-sign`
+** **Name:** `ansible-sign-cred`
+** **Organization:** `Default`
 ** **Credential Type:** `GPG Public Key`
 . Paste the full public key from the clipboard into the text field.
 . Click btn:[Create Credential].
@@ -298,11 +299,11 @@ To configure the Gitea repository as a project you need an SCM credential. In me
 
 . Click btn:[Create credential].
 . Set:
-** **Name:** `gitea`
+** **Name:** `gitea-cred`
 ** **Organization:** `Default`
 ** **Credential Type:** `Source Control`
-** **Username:** {gitea_username}
-** **Password:** {gitea_password}
+** **Username:** `{gitea_username}`
+** **Password:** `{gitea_password}`
 . Click btn:[Create credential].
 
 Create the project in menu:Automation Execution[Projects]:
@@ -312,9 +313,9 @@ Create the project in menu:Automation Execution[Projects]:
 ** **Name:** `Signed Project`
 ** **Organization:** `Default`
 ** **Source Control Type:** `Git`
-** **Content Signature Validation Credential:** `ansible-sign`
-** **Source Control URL:** {gitea_url}/{gitea_username}/{gitea_controller_project}.git
-** **Source Control Credential:** `gitea`
+** **Content Signature Validation Credential:** `ansible-sign-cred`
+** **Source Control URL:** pass:a,q[`{gitea_url}/{gitea_username}/{gitea_controller_project}.git`]
+** **Source Control Credential:** `gitea-cred`
 . Click btn:[Create project].
 
 The important part of the Project configuration is **Content Signature Validation Credential**, this tells automation controller to use the GPG key in the credentials to verify the repository.
