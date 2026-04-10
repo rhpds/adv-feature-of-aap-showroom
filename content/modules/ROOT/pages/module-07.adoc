@@ -314,7 +314,7 @@ Create the project in menu:Automation Execution[Projects]:
 ** **Organization:** `Default`
 ** **Source Control Type:** `Git`
 ** **Content Signature Validation Credential:** `ansible-sign-cred`
-** **Source Control URL:** pass:a,q[`{gitea_url}/{gitea_username}/{gitea_controller_project}.git`]
+** **Source Control URL:** [`{gitea_url}/{gitea_username}/{gitea_controller_project}.git`]
 ** **Source Control Credential:** `gitea-cred`
 . Click btn:[Create project].
 
