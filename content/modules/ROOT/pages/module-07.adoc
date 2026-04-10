@@ -313,9 +313,9 @@ Create the project in menu:Automation Execution[Projects]:
 ** **Name:** `Signed Project`
 ** **Organization:** `Default`
 ** **Source Control Type:** `Git`
-** **Content Signature Validation Credential:** `ansible-sign-cred`
+** **Content Signature Validation Credential:** `ansible-sign`
 ** **Source Control URL:** [`{gitea_url}/{gitea_username}/{gitea_controller_project}.git`]
-** **Source Control Credential:** `gitea-cred`
+** **Source Control Credential:** `gitea`
 . Click btn:[Create project].
 
 The important part of the Project configuration is **Content Signature Validation Credential**, this tells automation controller to use the GPG key in the credentials to verify the repository.
