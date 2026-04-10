@@ -1,13 +1,13 @@
 = Policy Enforcement
 
-This chapter explores Ansible Automation Platform Policy Enforcement — the practice of using programmatic guardrails to ensure automation remains compliant, secure, and predictable. While standard automation focuses on how to perform a task, policy enforcement focuses on whether that task should be allowed to run based on real-time environmental context.
+This chapter explores Ansible Automation Platform Policy Enforcement — the practice of using programmatic guardrails to ensure automation remains compliant, secure, and predictable. While standard automation focuses on how to perform a task, policy enforcement focuses on whether that task should be allowed to run based on environmental context.
 
 [TIP]
 ====
 **Enforce policies to keep AI in check**
 We are entering the era of AIOps, this basically means infusing AI inferences into automated IT actions.
 You need to ensure that your AI-driven automation will function within the boundaries of internal and external policies.
-With Ansible Automation Platform, you can enforce policies at automation runtime to ensure each AIOps action stays within boundaries. 
+With Ansible Automation Platform, you can enforce policies at automation runtime to ensure each AIOps action stays within boundaries.
 ====
 
 == Policy Enforcement in AAP
@@ -29,16 +29,15 @@ The flow when using Policy Enforcement is this:
 
 * **Job Request**: A user triggers a Job Template or an API call starts an automation task.
 * **Policy Check**: Before the playbook starts, the Automation Controller sends the job's metadata (who is running it, what inventory is targeted, what variables are being used) to the Policy Engine (OPA).
-* **Evaluation**: The engine compares the request against Rego policies (the language used by OPA).
-* **Decision**: If the decision is `Allow: true`, the job proceeds to execution. But with `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
-
+* **Evaluation**: The engine compares the request against rego policies (the language used by OPA).
+* **Decision**: If the decision is `allow: true`, the job proceeds to execution. But with `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
 
 As always it is better to see this in action, so let us get started.
 If you have not already, log in to menu:Codeserver[] (password `{vscode_server_password}`) and AAP as `{controller_username}` with password `{controller_password}`.
 
-The first step is the Rego policies. A set of policies is prepared for you; clone the repository on the bastion host and copy the policies into the OPA server policy directory:
+The first step is the rego policies. A set of policies is prepared for you; clone the repository on the bastion host and copy the policies into the OPA server policy directory:
 
-In your VS Code terminal (or SSH session) run:
+In your **VS Code Server** terminal (or SSH session) run:
 
 [source,shell,role=execute,subs="attributes"]
 ----
@@ -47,7 +46,7 @@ git clone {gitea_url}/{gitea_username}/opa-policy-enforcement.git
 cp opa-policy-enforcement/* /var/lib/opa/policies/
 ----
 
-Copying the policies to the policy directory of the OPA server makes them available immediately. 
+Copying the policies to the policy directory of the OPA server makes them available immediately.
 
 == Configuring AAP for Policy Enforcement
 
@@ -66,7 +65,7 @@ package aap.deny
 
 import rego.v1
 
-deny := { 
+deny := {
   "allowed": false,
   "violations": ["No job execution is allowed"]
 }
@@ -74,7 +73,7 @@ deny := {
 
 [TIP]
 ====
-We will not go into the intricacies of the rego language here. Writing more involved policies is not easy, no sugar-coating here. **But** there are a lot of resources and examples to help you get started, we'll list some at the end of the chapter. As a tip the AI-coding assistants are pretty good with this, e.g. `extra_vars.rego` was created with the help of Cursor.
+We will not go into the intricacies of the rego language here. Writing more involved policies is not easy, no sugar-coating here. **But** there are a lot of resources and examples to help you get started, we'll list some at the end of the chapter. As a tip, the AI-coding assistants are pretty good with this, e.g. `extra_vars.rego` was created with the help of Cursor.
 ====
 
 To actually use policies in Automation Execution you have to configure Policy Enforcement on one of the three objects **Job Template**, **Inventory** or **Organization**.
@@ -163,7 +162,7 @@ If the input doesn't match the allowed input it will deny the Template run. Let'
 
 === Test the Policy
 
-What do you think will happen? Launch the Job Template and let's see... 
+What do you think will happen? Launch the Job Template and let's see...
 
 [source,subs="attributes"]
 ----
@@ -185,7 +184,7 @@ environment: test
 
 == Maintenance Window Policy
 
-Here is another real-world example dealing with maintenance windows. Companies often have a certain time window where system maintenance like updates can happen. To make sure no conflicting automation is running, e.g. reconfiguration of an application, it would be very helpful to not allow running automation jobs other then the ones needed for maintenance. 
+Here is another real-world example dealing with maintenance windows. Companies often have a certain time window where system maintenance like updates can happen. To make sure no conflicting automation is running, e.g. reconfiguration of an application, it would be very helpful to not allow running automation jobs other then the ones needed for maintenance.
 
 Here our policy `maintenance_window.rego` comes to the rescue:
 
@@ -198,15 +197,15 @@ Here our policy `maintenance_window.rego` comes to the rescue:
 The policy file has already been copied to the policy directory. To place the current time inside the configured window:
 
 . Run `date -u` in your terminal to get the current UTC time.
-. Open `/var/lib/opa/policies/maintenance_window.rego` in VS Code or your editor.
+. Open `/var/lib/opa/policies/maintenance_window.rego` in **VS Code Server** or your editor.
 . Find the block with the time values:
 
 [source,subs="attributes"]
 ----
 # Window is [start, end) — includes start, excludes end (02:00–04:00 means 02:00 up to 03:59:59)
-window_start_hour := 9 
+window_start_hour := 9
 window_start_minute := 0
-window_end_hour := 11 
+window_end_hour := 11
 window_end_minute := 0
 ----
 
@@ -215,9 +214,9 @@ Take the output of the `date` command and define a time window where it would fa
 [source,subs="attributes"]
 ----
 # Window is [start, end) — includes start, excludes end (02:00–04:00 means 02:00 up to 03:59:59)
-window_start_hour := 12 
+window_start_hour := 12
 window_start_minute := 0
-window_end_hour := 14 
+window_end_hour := 14
 window_end_minute := 0
 ----
 
@@ -261,11 +260,11 @@ This job cannot be executed due to a policy violation or error. See the followin
 'between 01:00 and 02:00 (UTC).']}}
 ----
 
-As expected the maintenance Job is not allowed to run outside the maintenance window. 
+As expected the maintenance Job is not allowed to run outside the maintenance window.
 
 == Conclusion
 
-This chapter was meant to provide a brief introduction to Policy Enforcement in AAP. To help you get started with creating rego policies, here a some pointers to more information:
+This chapter was meant to provide a brief introduction to Policy Enforcement in AAP. This might give you some ideas for more gardrails around your automation which go beyond the role based access control, by looking at the context of an automation job. To help you get started with creating rego policies, here a some pointers to more information:
 
 * link:https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/html/configuring_automation_execution/controller-pac[AAP Documentation: Implementing policy enforcement,window=blank]
 * link:https://autodotes.com/posts/muid7W8FhABshWX1zwDS[Blog Post: Getting Started with Policy Enforcement for Ansible Automation Platform,window=blank]

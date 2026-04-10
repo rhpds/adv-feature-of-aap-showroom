@@ -30,7 +30,7 @@ Participants need access to:
 * Red Hat OpenShift cluster (provided during workshop)
 * Container registry access (Quay.io or Red Hat Registry)
 * Terminal/command line environment
-* Code editor (VS Code recommended)
+* Code editor (VS Code Server recommended)
 
 === Network requirements
 * Internet connectivity for downloading container images

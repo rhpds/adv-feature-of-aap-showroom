@@ -3,7 +3,7 @@
 == Overview
 
 With Ansible Automation Platform 2.5 we have introduced a new, unified Web UI.
-It provides consistent access to the components of AAP in one interface. 
+It provides consistent access to the components of AAP in one interface.
 
 To access the UI, open {controller_url}[window=blank] in a new browser tab, or in Showroom click the menu:AAP[] tab.
 Both take you to the AAP login page:
@@ -11,11 +11,11 @@ Both take you to the AAP login page:
 image::aap-login.png[500,300,link=self,window=blank]
 
 Log in as user `{controller_username}` with the password `{controller_password}`.
-This will open the shiny new UI, let's have a look around.
+This will open the shiny new UI. Let's have a look around.
 
-TIP: Depending on the width of your browser window the main menu to the left might be hidden. Just click the "Hamburger-style" button in the upper left and it will fold out (see below for more details). Or just resize your browser... ;-)
+TIP: Depending on the width of your browser window the main menu on the left might be hidden. Just click the "Hamburger" menu in the upper left and it will fold out (see below for more details), or just resize your browser window... ;-)
 
-The menu lists the main components of AAP, most entries will open sub-menus when clicked, like the menu:Automation Execution[] in this example:
+The menu lists the main components of AAP, most entries will open sub-menus when clicked, like menu:Automation Execution[] in this example:
 
 image::aap-ui-menu-26.png[800,600,link=self,window=blank]
 
@@ -23,7 +23,7 @@ When you access the UI, you will start on the menu:Overview[] page which provide
 Right now your environment hasn't done anything so this will be pretty empty.
 But we'll of course change this during the course of this lab.
 
-But there is more: if you scroll down, you'll find a section called **Quick Starts**. These are interactive guides to get you started quickly with key Ansible Automation Platform features. This will help introduce new users to Ansible Automation Platform.
+But there is more: if you scroll down, you'll find a menu called **Quick Starts**. These are interactive guides to get you started quickly with key Ansible Automation Platform features. This will help to introduce new users to the Ansible Automation Platform.
 
 image::quickstarts.png[800,600,link=self,window=blank]
 
@@ -38,16 +38,20 @@ This is where you manage automation jobs.
 There you can create event triggers to automatically start your automation.
 
 * menu:Automation Analytics[] provides access to the Automation Calculator, Host Metrics and the usage of the AAP subscriptions.
+This helps you to get an overview how automation is used and potential cost savings.
 
-* menu:Automation Content[] unifies the Private Automation Hub into the UI, so that you can manage reusable automation content, like container images (Execution and Decision Environments) and Ansible collections.
+* menu:Automation Content[] adds the Private Automation Hub to the UI.
+This allows you to manage reusable automation content, like container images (Execution and Decision Environments) and Ansible collections.
 
-* menu:Ansible Lightspeed[] is providing a link to get started with generative AI for AAP automation code.
+* menu:Ansible Lightspeed[] is providing a link to get started with generative AI for Ansible Playbooks.
 
 * menu:Access Management[] holds the management of the RBAC (Role Based Access Control) system to control access to AAP.
 This is where you will manage organizations, teams, roles and users; we'll come back to it.
 
+* menu:Settings[] for configuring AAP and system wide settings.
+Here you can set system defaults for Job execution, system behavior, external logging and much more.
 
-* And finally menu:Settings[] for configuring AAP and the menu:QuickStarts[] you've already seen.
+* menu:QuickStarts[] was already covered above.
 
 The new UI is not only eye-candy, the main change is hidden: all traffic to the UI components now goes through a single entry point called **Platform Gateway**.
 It handles authentication and authorization for the Ansible Automation Platform and serves the platform user interface.

@@ -64,15 +64,15 @@ ansible-navigator:
 
 The environment variables prefixed with `CONTROLLER_` are the connection and credential parameters.
 
-NOTE: For your convenience we added the authentication credentials for automation controller to the configuration, so you don't have to manually log in.
-In most real world scenarios you probably don't want to do this and will not store your password in a clear text configuration file.
+IMPORTANT: For your convenience we added the authentication credentials for automation controller to the configuration, so you don't have to manually log in.
+In real world you don't want to do this and will not store your password in a clear text configuration file.
 
-TIP: For performance and security reasons, it is recommended "in real life" to generate and use a token for your automation.
+TIP: For performance and security reasons, it is recommended "in real life" to generate and use a token for your automation and store the token in a secure place.
 Check the https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/using_content_navigator/[ansible-navigator,window=blank] documentation for details on how to do this.
 
 == Create the Playbook
 
-Now, let's get the Playbook. In your VS Code terminal (or SSH session) run:
+Now, let's get the Playbook. In your **VS Code Server** terminal (or SSH session) run:
 
 [source,shell,role=execute,subs="attributes"]
 ----
@@ -81,7 +81,7 @@ cd {gitea_controller_project}
 cat configure-controller.yml
 ----
 
-Use `cat` or the VS Code editor to have a good look at what the `configure-controller.yml` Playbook is supposed to do.
+Use `cat` or the **VS Code Server** editor to have a good look at what the `configure-controller.yml` Playbook is supposed to do.
 
 Since we are calling the REST API of automation controller, the Ansible playbook is running against **localhost**, but the modules will connect to the URL provided by the **CONTROLLER_HOST** environment variable set for you in `~/.ansible-navigator.yml`.
 
@@ -93,7 +93,7 @@ Tasks:
 +
 TIP: SSH keys have already been created and distributed in your lab environment and `sudo` has been setup on the managed hosts to allow password-less login. When you SSH into a host as a regular user from the bastion node you will become user **lab-user** on the host you logged in.
 
-* **Create Projects**: different projects are created based on public Git repos which we have synced to your environment (check how we define the scm variable if you're interested in the details).
+* **Create Projects**: different projects are created based on public git repos which we have synced to your environment (check how we define the scm variable if you're interested in the details).
 
 * **Create Web Infra and Dev Templates**: and finally two job templates are created based on the previously added elements (the trinity inventory, credential and project).
 
@@ -106,11 +106,11 @@ After you have inspected the Playbook finally run it:
 ansible-navigator run configure-controller.yml
 ----
 
-While in `ansible-navigator` press a line number e.g. to get more information about a play or tasks.
+While in `ansible-navigator` press a line number e.g. to get more information about a play or a task.
 This works only for less then 10 lines, if you want to inspect a line number with 2 digits or more, you need to prefix it with kbd:[:].
-To leave, press kbd:[Esc] multiple times to get up again in the views and eventually out of Navigator.
+To leave, press kbd:[Esc] multiple times to get up again in the views and eventually out of Ansible Navigator.
 
-IMPORTANT: Do **not** leave the Navigator TUI (Text User Interface) before the job is finished!
+IMPORTANT: Do **not** leave the Ansible Navigator TUI (Text User Interface) before the job is finished!
 Check the colored text box in the bottom-right corner, it must go from [.green-background]#Running# to [.green-background]#Successful#.
 
 After the successful run, log in to {controller_url}[Ansible Automation Platform,window=blank] as `{controller_username}` with password `{controller_password}`.
@@ -121,3 +121,7 @@ Since automation controller stores the SSH key encrypted, the Ansible Module is 
 This is what we want and expect from a secure system, but it also means Ansible has no means to verify it and hence overrides the SSH key or password every time the Ansible Playbook is executed.
 This can be overridden with the `update_secrets` parameter.
 Also note that the `credential_type` value is simply the type's name.
+
+== Conclusion
+
+The Red Hat Ansible Automation Platform is developed following the "API first" model allowing all aspects of the system to be automatically configured and managed by using the API. This also allows us to "automate the automation" and use Ansible to fully configure it.
