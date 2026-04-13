@@ -65,10 +65,9 @@ package aap.deny
 
 import rego.v1
 
-deny := {
-  "allowed": false,
-  "violations": ["No job execution is allowed"]
-}
+allowed := false
+
+violations := ["No job execution is allowed"]
 ----
 
 [TIP]
