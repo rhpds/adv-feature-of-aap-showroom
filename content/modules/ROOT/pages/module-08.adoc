@@ -86,7 +86,7 @@ Now, going back to the menu:Templates[] menu, you'll see that you can:
 . Return to the portal.
 . Click [.underline]#Sync now# in the upper left.
 . Select **Job templates** only, then click btn:[Ok].
-. Refresh the browser page.
+. Refresh the frame, or the whole browser page.
 
 You should now see your new fancy description.
 
