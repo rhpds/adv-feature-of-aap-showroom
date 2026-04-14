@@ -22,7 +22,7 @@ Look around, to the right in the UI you'll see a list of repositories, click the
 
 === Clone the repository
 
-Switch back to the menu:Codeserver[] tab in the next tasks.
+Switch back to the menu:Codeserver[] tab for the next tasks.
 
 Next, you need the repository from Gitea in your home directory on the bastion host. As you have already cloned this repo in the first chapter it should already exist. To check, in your **VS Code Server** terminal run `ls -l ~`, which should output something like:
 
@@ -38,6 +38,7 @@ If you don't have the git repository, run the following commands:
 
 [source,shell,role=execute,subs="attributes"]
 ----
+cd
 git clone {gitea_url}/{gitea_username}/{gitea_controller_project}.git
 cd {gitea_controller_project}
 ----

@@ -44,10 +44,10 @@ We could create and add users to this new team but {controller_username} as syst
 
 Access the SSP UI:
 
-. Open {ssap_url}[window=blank]. Sign in with Ansible Automation Platform when prompted.
-. Click btn:[Sign In].
-. If directed to AAP, log in if needed as `{controller_username}` with password `{controller_password}`.
-. Click btn:[Authorize] for Read and Write scope access.
+. Open {ssap_url}[window=blank] or the menu:SSAP[] tab.
+. Click btn:[Sign In] to sign in with Ansible Automation Platform.
+. If directed to AAP, log in as `{controller_username}` with password `{controller_password}`.
+. Click btn:[Authorize] for Reading and Writing scope access.
 
 You will be greeted by the shiny new SSP Portal! Since you are an admin user, you will see all **Job Templates** configured, but because you are not _the_ `admin` user, you can't do anything with it.
 Let's correct this!
@@ -115,9 +115,9 @@ You are prompted for **Select URL** to upload the custom dynamic template from a
 
 Paste the following URL into the **Select URL** field:
 
-[source,role=execute]
+[source,shell,role=execute,subs="attributes"]
 ----
-https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml
+{gitea_url}/{gitea_username}/ssap-customtemplates/raw/branch/main/rhel_dynamic.yml
 ----
 
 . Click btn:[Analyze] to analyze the custom dynamic template.
@@ -126,11 +126,11 @@ https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/m
 
 image::add-ssap-template.png[link=self,window=blank]
 
-You will now see the custom dynamic template in the Templates list with a title of "Manage RHEL Time Servers"
+You will now see the custom dynamic template in the Templates list with a title of "&#x23F0; Manage RHEL Time Servers"
 
 image::ssap-show-custtemp.png[link=self,window=blank]
 
-Our custom template is backed by a job template in Ansible Automation Platform. In the https://raw.githubusercontent.com/ansible-labs-crew/customtemplates/refs/heads/main/rhel_dynamic.yml[imported YAML template,window=blank], you can see which job template it launches. That file contains a section like this:
+Our custom template is backed by a job template in Ansible Automation Platform. In the {gitea_url}/{gitea_username}/ssap-customtemplates/raw/branch/main/rhel_dynamic.yml[imported YAML template,window=blank], you can see which job template it launches. That file contains a section like this:
 
 [source,yaml]
 ----

@@ -95,7 +95,7 @@ TIP: SSH keys have already been created and distributed in your lab environment 
 
 * **Create Projects**: different projects are created based on public git repos which we have synced to your environment (check how we define the scm variable if you're interested in the details).
 
-* **Create Web Infra and Dev Templates**: and finally two job templates are created based on the previously added elements (the trinity inventory, credential and project).
+* **Create * Template**: and finally three job templates are created based on the previously added elements (the trinity inventory, credential and project).
 
 === Run the Playbook
 

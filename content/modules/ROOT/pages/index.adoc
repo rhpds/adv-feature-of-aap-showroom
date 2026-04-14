@@ -87,6 +87,8 @@ image::vscode-terminal.png[link=self,window=blank]
 
 Congrats, you now have a shell terminal on your bastion node you can use it to work on the command line. From here you can run commands or access the other hosts in your lab environment, if the lab instructions tell you to do so.
 
+TIP: You might have seen there is a Showroom tab named **>_Terminal**, this will give you a plain terminal without **VS Code Server**.
+
 === OPTIONAL: Direct Lab Access using SSH
 
 You can of course use SSH directly to access the bastion node when you have an SSH client ready to go and know your way around:
