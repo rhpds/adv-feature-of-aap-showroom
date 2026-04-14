@@ -11,7 +11,5 @@
 ** xref:module-07.adoc[7. Secure the Automation Supply Chain]
 ** xref:module-08.adoc[8. The new Self-Service Automation Portal]
 ** xref:module-09.adoc[9. Policy Enforcement]
-* **The End**
-** xref:the-end.adoc[Before you leave!]
-* **Additional Information**
-** xref:lab-access.adoc[Lab Access]
+* xref:the-end.adoc[**Before you leave!**]
+* xref:lab-access.adoc[**Lab Access**]
