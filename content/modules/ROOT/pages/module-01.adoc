@@ -11,7 +11,7 @@ Both take you to the AAP login page:
 image::aap-login.png[500,300,link=self,window=blank]
 
 Log in as user `{controller_username}` with the password `{controller_password}`.
-This will open the shiny new UI. Let's have a look around.
+This will open the UI, let's have a look around.
 
 TIP: Depending on the width of your browser window the main menu on the left might be hidden. Just click the "Hamburger" menu in the upper left and it will fold out (see below for more details), or just resize your browser window... ;-)
 

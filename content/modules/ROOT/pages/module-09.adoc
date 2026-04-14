@@ -263,7 +263,7 @@ As expected the maintenance Job is not allowed to run outside the maintenance wi
 
 == Conclusion
 
-This chapter was meant to provide a brief introduction to Policy Enforcement in AAP. This might give you some ideas for more gardrails around your automation which go beyond the role based access control, by looking at the context of an automation job. To help you get started with creating rego policies, here a some pointers to more information:
+This chapter was meant to provide a brief introduction to Policy Enforcement in AAP. This might give you some ideas for more guardrails around your automation which go beyond the role based access control, by looking at the context of an automation job. To help you get started with creating rego policies, here a some pointers to more information:
 
 * link:https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/html/configuring_automation_execution/controller-pac[AAP Documentation: Implementing policy enforcement,window=blank]
 * link:https://autodotes.com/posts/muid7W8FhABshWX1zwDS[Blog Post: Getting Started with Policy Enforcement for Ansible Automation Platform,window=blank]

@@ -176,7 +176,7 @@ Enter survey values as you like and start the job.
 curl http://{node1_hostname}/nodejs
 ----
 
-. In the web UI, log out as `nightshift` and log in again as `{controller_username}`.
+. In the web UI, log out as `nightshift` and log in again as `{controller_username}` with password `{controller_password}`.
 
 == Conclusion
 
