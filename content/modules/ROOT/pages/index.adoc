@@ -73,13 +73,11 @@ WARNING: While forward-skipping chapters has been tested, jumping backwards has 
 
 == Accessing your Lab Environment
 
-For some exercises you'll have to use the Linux commandline. You have three options:
+For some exercises you'll have to use the Linux command line.
+Throughout this guide we'll refer to this as _accessing a terminal_.
+And actually you have three options to do so, so take your pick:
 
-* **VS Code Server** when an IDE is your thing
-* A **Terminal** running in your browser for people familiar with Nano or Vi
-* And even **SSH** if you're the Linux admin type... ;-)
-
-=== Using VS Code Server
+=== Using VS Code Server - when an IDE is your thing
 
 .Click here to see the instructions for VS Code Server
 [%collapsible]
@@ -99,7 +97,7 @@ image::vscode-terminal.png[link=self,window=blank]
 Congrats, you now have a shell terminal on your bastion node you can use it to work on the command line. From here you can run commands or access the other hosts in your lab environment, if the lab instructions tell you to do so.
 ====
 
-=== Using the in-Browser Terminal
+=== Using the in-Browser Terminal - for people familiar with Nano or Vi
 
 .Click here to see the instructions for the Browser Terminal
 [%collapsible]
@@ -107,9 +105,9 @@ Congrats, you now have a shell terminal on your bastion node you can use it to w
 There is a Showroom tab named **>_Terminal**, this will give you a plain terminal on your bastion node where `lab-user` is already logged in.
 ====
 
-=== Using SSH
+=== Using SSH - if you're the Linux admin type... ;-)
 
-.Click here to see the instructions for the SSH
+.Click here to see the instructions for SSH
 [%collapsible]
 ====
 You can of course use SSH directly to access the bastion node when you have an SSH client ready to go and know your way around:
