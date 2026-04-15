@@ -40,10 +40,12 @@ Your lab includes a number of servers:
 Some hints to get you started:
 
 * Don’t type everything manually, use copy & paste from the browser when appropriate, but take your time to understand what you are actually doing.
-* To **edit files** or **open a terminal window**, we provide **VS Code Server**, basically the great Visual Studio Code Editor running in your browser.
+* To **edit files** or **open a terminal window**, we provide a couple of methods detailed below.
 * You can click on any screenshot to magnify it in a new window or tab.
   Once done, simply close the window or tab to come back to the instructions.
-* Copy and paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the context menu summoned by a right mouse-click always works.
+* Copy and esp paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but 
+** using the context menu summoned by a right mouse-click works well in Firefox
+** in Chrome use the middle-button/wheel of the mouse for pasting.
 
 == Finding your way in the lab
 
@@ -65,13 +67,13 @@ The lab instructions are divided into chapters, or exercises. The chapters cover
 * **Intermediate**
 * **Expert**
 
-After finishing the **Base** level (because `Configure resources with Ansible` is a prerequisite for other chapters) you are free to choose chapters based on interest.
+After finishing the **Base** level (because `Configure resources with Ansible` is a prerequisite for other chapters) you are free to explore chapters based on interest.
 
 WARNING: While forward-skipping chapters has been tested, jumping backwards has not, so your mileage might vary if you do... ;-)
 
 == Accessing your Lab Environment
 
-For most exercises you'll have to use the Linux commandline. You have three options:
+For some exercises you'll have to use the Linux commandline. You have three options:
 
 * **VS Code Server** when an IDE is your thing
 * A **Terminal** running in your browser for people familiar with Nano or Vi
