@@ -40,10 +40,12 @@ Your lab includes a number of servers:
 Some hints to get you started:
 
 * Don’t type everything manually, use copy & paste from the browser when appropriate, but take your time to understand what you are actually doing.
-* To **edit files** or **open a terminal window**, we provide **VS Code Server**, basically the great Visual Studio Code Editor running in your browser.
+* To **edit files** or **open a terminal window**, we provide a couple of methods detailed below.
 * You can click on any screenshot to magnify it in a new window or tab.
   Once done, simply close the window or tab to come back to the instructions.
-* Copy and paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the context menu summoned by a right mouse-click always works.
+* Copy and esp paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but 
+** using the context menu summoned by a right mouse-click works well in Firefox
+** in Chrome use the middle-button/wheel of the mouse for pasting.
 
 == Finding your way in the lab
 
@@ -59,20 +61,27 @@ TIP: You can also access the environment directly in separate browser tabs using
 
 == Lab Structure
 
-The lab instructions are divided into chapters, or exercises. The chapters cover a lot of ground and you might not be able to finish all of them in our limited time frame or you already know some of the areas covered. To help you choose between chapters we have divided the content into three levels:
+The lab instructions are divided into chapters, or exercises. The chapters cover a lot of ground and you might not be able to finish all of them in our limited time frame or you already know some of the areas covered. To help you choose between chapters we have divided the content into three levels you'll find as fold-outs in the table of contents:
 
 * **Base**
 * **Intermediate**
 * **Expert**
 
-After finishing the **Base** level (because `Configure resources with Ansible` is a prerequisite for other chapters) you are free to choose chapters based on interest.
+After finishing the **Base** level (because `Configure resources with Ansible` is a prerequisite for other chapters) you are free to explore chapters based on interest.
 
 WARNING: While forward-skipping chapters has been tested, jumping backwards has not, so your mileage might vary if you do... ;-)
 
 == Accessing your Lab Environment
 
-=== Using VS Code
+For some exercises you'll have to use the Linux command line.
+Throughout this guide we'll refer to this as _accessing a terminal_.
+And actually you have three options to do so, so take your pick:
 
+=== Using VS Code Server - when an IDE is your thing
+
+.Click here to see the instructions for VS Code Server
+[%collapsible]
+====
 Your main point of contact with the lab is **VS Code Server**, providing a VS Code-experience in your browser. You'll use VS Code Server to open terminals and to edit files (either in the build-in GUI editor or just using your favorite editor on the command line).
 
 Now, open **VS Code Server** using {vscode_server_url}[VS Code Server,window=blank], or click the menu:Codeserver[] tab (which should be already selected).
@@ -86,11 +95,21 @@ Use the password `{vscode_server_password}` to log in to the **VS Code Server** 
 image::vscode-terminal.png[link=self,window=blank]
 
 Congrats, you now have a shell terminal on your bastion node you can use it to work on the command line. From here you can run commands or access the other hosts in your lab environment, if the lab instructions tell you to do so.
+====
 
-TIP: You might have seen there is a Showroom tab named **>_Terminal**, this will give you a plain terminal without **VS Code Server**.
+=== Using the in-Browser Terminal - for people familiar with Nano or Vi
 
-=== OPTIONAL: Direct Lab Access using SSH
+.Click here to see the instructions for the Browser Terminal
+[%collapsible]
+====
+There is a Showroom tab named **>_Terminal**, this will give you a plain terminal on your bastion node where `lab-user` is already logged in.
+====
 
+=== Using SSH - if you're the Linux admin type... ;-)
+
+.Click here to see the instructions for SSH
+[%collapsible]
+====
 You can of course use SSH directly to access the bastion node when you have an SSH client ready to go and know your way around:
 
 [subs="attributes",source,shell,role=execute]
@@ -105,6 +124,7 @@ TIP: The user to access the terminal is `{ssh_username}`, but your bastion node 
 TIP: All access information has been summarized for your convenience under xref:lab-access.adoc[Lab Access], accessible in the navigation menu to the right.
 
 The "Terminal" tab gives you the same functionality as SSH without the need to login, you're directly on the bastion host.
+====
 
 == Lab Configuration
 

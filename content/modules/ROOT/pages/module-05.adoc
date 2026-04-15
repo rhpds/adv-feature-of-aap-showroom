@@ -25,7 +25,7 @@ But this approach would have been too involved for this lab, so here you are: Ba
 
 First you need an inventory source. In *real life* this would be your cloud provider, your CMDB, or what not. For the sake of this lab we put a simple file into a GitLab repository.
 
-Use curl to query your "external inventory source":
+Go to your terminal (how to access a terminal is described xref:index.adoc#_accessing_your_lab_environment[here]) and use curl to query your "external inventory source":
 
 [source,shell,role=execute,subs="attributes"]
 ----
@@ -117,8 +117,8 @@ What it basically does is to return the data collected by curl when called with 
 
 But before we integrate the custom inventory plugin into our automation execution, it’s a good idea to test it on the command line:
 
-. Bring up your **VS Code Server** browser tab; Log in with password `{controller_password}`, if you've been logged out or never logged in before.
-. In either the visual editor or in the terminal using your favorite command-line editor, create the file `/home/{ssh_username}/dyninv.sh` with the content of the Bash script shown above.
+. Bring up your terminal (for the **VS Code Server** terminal log in with password `{controller_password}`).
+. Create the file `/home/{ssh_username}/dyninv.sh` with the content of the Bash script shown above.
 
 TIP: Create the script in `/home/{ssh_username}/`.
 

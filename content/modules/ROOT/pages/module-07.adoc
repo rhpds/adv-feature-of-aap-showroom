@@ -22,9 +22,9 @@ Look around, to the right in the UI you'll see a list of repositories, click the
 
 === Clone the repository
 
-Switch back to the menu:Codeserver[] tab for the next tasks.
+Switch to your terminal (how to access a terminal is described xref:index.adoc#_accessing_your_lab_environment[here]) for the next tasks.
 
-Next, you need the repository from Gitea in your home directory on the bastion host. As you have already cloned this repo in the first chapter it should already exist. To check, in your **VS Code Server** terminal run `ls -l ~`, which should output something like:
+Next, you need the repository from Gitea in your home directory on the bastion host. As you have already cloned this repo in the first chapter it should already exist. To check, in your terminal run `ls -l ~`, which should output something like:
 
 [source,console,subs="attributes"]
 ----
@@ -258,7 +258,7 @@ Push the new files to your git repository server:
 git push
 ----
 
-**VS Code Server** will again open a small dialog at the top of the window asking for username and password, or git in the terminal will ask for the same information.
+**VS Code Server** will open a small dialog at the top of the window asking for username and password, or git in the terminal will ask for the same information.
 In both cases, enter `{gitea_username}` and `{gitea_password}`.
 
 image::vscode-git-login.png[800,600,link=self,window=blank]
@@ -344,7 +344,7 @@ Above tasks indicate that the signature verification was successful.
 
 The last step in this lab is to check, if automation controller picks up if the content has been changed without re-signing it, indicating somebody has tampered with the content.
 
-Open the file `/home/{ssh_username}/{gitea_controller_project}/apache_install.yml` in your **VS Code Server** and change something, like set `enabled: false`.
+Open the file `/home/{ssh_username}/{gitea_controller_project}/apache_install.yml` in your terminal and change something, like set `enabled: false`.
 
 Push the new version to the git repository:
 
@@ -355,7 +355,7 @@ git commit -m "changing file"
 git push
 ----
 
-**VS Code Server** will again open a small dialog at the top of the window asking for username and password, or git in the terminal will ask for the same information.
+**VS Code Server** will open a small dialog at the top of the window asking for username and password, or git in the terminal will ask for the same information.
 In both cases, enter `{gitea_username}` respectively `{gitea_password}`.
 
 If this change was legit, you would have re-signed the repository content. Since we didn't sign it automation controller should recognize the signature of the file is not valid anymore and fail the repository sync. Give it a try:
