@@ -37,7 +37,7 @@ If you have not already, log in to menu:Codeserver[] (password `{vscode_server_p
 
 The first step is the rego policies. A set of policies is prepared for you; clone the repository on the bastion host and copy the policies into the OPA server policy directory:
 
-In your **VS Code Server** terminal (or SSH session) run:
+In your terminal (how to access a terminal is described xref:index.adoc#_accessing_your_lab_environment[here]) run:
 
 [source,shell,role=execute,subs="attributes"]
 ----

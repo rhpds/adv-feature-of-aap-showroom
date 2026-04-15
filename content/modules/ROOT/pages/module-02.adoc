@@ -30,7 +30,7 @@ The Ansible modules we use in the playbook need to talk to AAP and require authe
 
 In this lab we use a little trick to save time and make it less error prone.
 We set the credentials and other values directly in the `.ansible-navigator.yml` file in your home directory, so `ansible-navigator` will pick them up with every run.
-Have a look for yourself in your terminal on the bastion host:
+Have a look for yourself in your terminal (how to access a terminal is described here) on the bastion host:
 
 [source,shell,role=execute]
 ----
