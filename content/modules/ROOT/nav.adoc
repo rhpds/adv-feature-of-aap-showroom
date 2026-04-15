@@ -1,7 +1,7 @@
 * xref:index.adoc[**Lab introduction**]
 * **Base**
 ** xref:module-01.adoc[1. Introduction to Unified UI]
-** xref:module-02.adoc[2. Configure resources with Ansible]
+** xref:module-02.adoc[2. Configure resources with Ansible (mandatory)]
 * **Intermediate**
 ** xref:module-03.adoc[3. Workflows for more efficient collaboration]
 ** xref:module-04.adoc[4. Surveys and the revamped access rights]
