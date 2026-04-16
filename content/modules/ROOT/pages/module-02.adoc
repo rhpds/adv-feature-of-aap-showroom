@@ -1,4 +1,4 @@
-= Configure resources with Ansible
+= Configure resources with Ansible (mandatory)
 
 This is an advanced lab, so we don’t really want you to use the web UI for everything.
 To fully embrace automation and adopt the https://en.wikipedia.org/wiki/Infrastructure_as_code[infrastructure as code,window=blank] (IaC) and https://redhat-cop.github.io/aap_config_as_code_docs/[Configuration as Code,window=blank] (CaC) methodology, **we want to use Ansible to configure our automation platform**.

@@ -43,9 +43,7 @@ Some hints to get you started:
 * To **edit files** or **open a terminal window**, we provide a couple of methods detailed below.
 * You can click on any screenshot to magnify it in a new window or tab.
   Once done, simply close the window or tab to come back to the instructions.
-* Copy and esp paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but 
-** using the context menu summoned by a right mouse-click works well in Firefox
-** in Chrome use the middle-button/wheel of the mouse for pasting.
+* Copy and esp paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the context menu summoned by a right mouse-click works well in Firefox and Chrome.
 
 == Finding your way in the lab
 
@@ -137,7 +135,7 @@ Without it, you would have to add parameters to each execution of `ansible-navig
 
 == Brief Introduction to `ansible-navigator`
 
-During this lab, you will always use `ansible-navigator` which supersedes the capabilities of `ansible-playbook`. Let's check Ansible Navigator has been installed correctly (if you use copy & paste for the first time, your browser might ask for permission for pasting):
+During this lab, you will always use `ansible-navigator` which supersedes the capabilities of `ansible-playbook`. Access your preferred terminal and check Ansible Navigator has been installed correctly (if you use copy & paste for the first time, your browser might ask for permission for pasting):
 
 [source,shell,role=execute]
 ----
@@ -158,7 +156,7 @@ Now have a look at your Ansible Navigator configuration file. It's a dot file in
 cat ~/.ansible-navigator.yml
 ----
 
-You can also open the file in **VS Code Server** by using the navigation bar on the left labelled "Explorer" or menu:File[Open File].
+You can also open the file in **VS Code Server** by using the navigation bar on the left labeled "Explorer" or menu:File[Open File].
 
 Note the following parameters within the `execution-environment` section:
 

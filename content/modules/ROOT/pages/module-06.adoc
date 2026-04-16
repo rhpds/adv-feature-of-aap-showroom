@@ -15,17 +15,13 @@ Let's create our first constructed inventory by opening menu:Automation Executio
 Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}[window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`
 
 . Create a new inventory: click btn:[Create inventory], then choose **Create constructed inventory**.
-** **Name:** `Constructed Inventory`
-** **Organization:** `Default`
-** Open the **Input Inventories** drop-down and select:
-+--
-*** [x] Cloud inventory
-*** [x] Lab inventory
---
-+
-Close the dropdown list by clicking on an empty area of the UI.
-
-** In **Source variables**, add the following:
+* **Name:** `Constructed Inventory`
+* **Organization:** `Default`
+* Open the **Input Inventories** drop-down and select:
+** [x] Cloud inventory
+** [x] Lab inventory
+* Close the dropdown list by clicking on an empty area of the UI.
+* In **Source variables**, add the following:
 +
 [source,yaml,role=execute]
 ----
@@ -35,11 +31,11 @@ strict: false
 ----
 +
 The first line informs the automation execution that we want to use the constructed inventory plugin. The *strict* setting set to "false" allows us to use variables later, which don't have to be defined. With *strict* set to "true" automation execution will fail to parse the constructed inventory, if a variable is not defined for any particular host.
-
++
 . Click btn:[Create inventory].
 +
 Now while in the details view of the **Constructed Inventory**:
-
++
 . Click btn:[Sync inventory].
 . After the sync has finished, open the menu:Hosts[] tab of the **Constructed inventory**.
 You should see all hosts from the `Cloud inventory` and the `Lab inventory` combined.

@@ -330,12 +330,6 @@ Open menu:Automation Execution[Jobs] and select the most recent project sync job
 [source,shell]
 ----
 PLAY [Perform project signature/checksum verification] *************************
-
-TASK [Verify project content using GPG signature] ******************************
-ok: [localhost]
-
-TASK [Verify project content against checksum manifest] ************************
-ok: [localhost]
 ----
 
 Above tasks indicate that the signature verification was successful.
@@ -350,6 +344,7 @@ Push the new version to the git repository:
 
 [source,shell,role=execute]
 ----
+cd ~/playbooks-adv-controller/
 git add apache_install.yml
 git commit -m "changing file"
 git push

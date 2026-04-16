@@ -50,7 +50,7 @@ TIP: Note how the survey content is shown on the **Details** tab of the Job view
 From an Ansible perspective they are actually nothing else than extra variables.
 
 After the job has completed, check the result.
-In your **VS Code Server** terminal, run again:
+In your terminal, run:
 
 [subs="attributes",source,bash,role=execute]
 ----
