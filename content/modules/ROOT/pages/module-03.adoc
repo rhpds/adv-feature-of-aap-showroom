@@ -59,22 +59,23 @@ Now, you set up the Workflow to bring together the work of the two teams.
 +
 After saving the template the **Workflow Visualizer** opens to allow you to build a workflow. You can later open the **Workflow Visualizer** again by using the button labeled btn:[View workflow visualizer] on the template details page.
 
-. Click on the btn:[Add step] button, a dialog to configure a new **workflow node** opens.
+. Click on the btn:[&#x2295; Add step] button, a dialog to configure a new **workflow node** opens.
 . First, select the node type **Job Template**
 . Choose the **Web Infra Deploy** Template
 . Click btn:[Next] then btn:[Finish]
 
 You get into the **Workflow Visualizer** overview showing the first workflow node. The node gets annotated with the name of the job.
 
-. Click the kebab-style menu right next to the existing node "Web Infra Deploy", you’ll see a number of options appearing:
+. Click the kebab-style menu right next to the existing node `Web Infra Deploy`, you’ll see a number of options appearing:
 image:workflow-node-edit.png[width="80",height="200",float="right",link=self,window=blank]
 ** **Edit step** to edit the current workflow node
 ** **Add step and link** to add new workflow node
 ** and a **Remove step** to delete current workflow node.
 
-. We want to add another workflow node, so click the **Add step and link** icon
-. Choose **Web App Deploy** as the next Job Template.
-. The **Status** field sets the condition under which the next node is executed, select **Run on success**
+. We want to add another workflow node, so click the **Add step and link** icon and fill the node details:
+** **Node type:** `Job Template`
+** **Job Template:** `Web App Deploy`
+** **Status**: `Run on success`
 +
 TIP: The **Status** field allows for more complex workflows. You could lay out different execution paths for successful and for failed Playbook runs.
 
@@ -90,7 +91,7 @@ image::webapplication-workflow.png[Workflow deploying Web Infra and App,link=sel
 
 Your **Deploy Webapplication** workflow is ready to go, launch it.
 
-Click btn:[Launch workflow] on the workflow template, or open menu:Automation Execution[Templates] and launch the **Deploy Webapplication** workflow using the rocket icon.
+Click btn:[&#x1F680; Launch workflow] on the workflow template, or open menu:Automation Execution[Templates] and launch the **Deploy Webapplication** workflow using the rocket icon.
 
 image::job_workflow.png[link=self,window=blank]
 
