@@ -32,9 +32,9 @@ image::oauth-app.png[800,600,link=self,window=blank]
 You'll need to create a team called `aap-admins` belonging to the `Default` organization.
 
 . Open menu:Access Management[Teams].
-. Click btn:[Create team].
+. Click btn:[&#x2295; Create team].
 . Enter:
-** **Name:** `aap-admins`
+** **Name:** `aap-admins` (the exact name is important!)
 ** **Organization:** `Default`
 . Click btn:[Create team].
 

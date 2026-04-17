@@ -28,7 +28,7 @@ So we just need to add a survey to our **Deploy Webapplication** workflow templa
 In the AAP UI, open menu:Automation Execution[Templates > Deploy Webapplication], then:
 
 . Open the menu:Survey[] tab.
-. Click btn:[Create survey question] and fill in:
+. Click btn:[&#x2295; Create survey question] and fill in:
 ** **Question:** `Web Content`
 ** **Answer variable name:** `content`
 ** **Answer type:** `Text`
@@ -85,7 +85,7 @@ This said, think about the fact that adding an approval step is adding a manual 
 
 So we decide to create our own role for them:
 
-. Click btn:[Create role] (it may be behind the three-dots menu), and enter:
+. Click btn:[&#x2295; Create role] (it may be behind the three-dots menu), and enter:
 ** **Name:** `WorkflowNightShifter`
 ** **Description:** `Nightshift workflow`
 ** **Resource type:** `Workflow job template`
@@ -102,7 +102,7 @@ Back to Automation Execution Roles and again filtering on "Workflow", you can ea
 Now create the user:
 
 . Open menu:Access Management[Users].
-. Click btn:[Create user].
+. Click btn:[&#x2295; Create user].
 . Fill in the fields for the new user:
 ** **Username:** `nightshift`
 ** **Password:** `{controller_password}`
@@ -123,7 +123,7 @@ For instance, permissions may be granted to a whole Team rather than each user o
 Create a team:
 
 . Open menu:Access Management[Teams].
-. Click btn:[Create team].
+. Click btn:[&#x2295; Create team].
 . Fill in the fields for the new team:
 ** **Name:** `NightShifters`
 ** **Organization:** `Default`

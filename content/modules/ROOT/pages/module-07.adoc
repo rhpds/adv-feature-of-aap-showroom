@@ -282,13 +282,13 @@ Copy **all** of its contents **including** `-----BEGIN PGP PUBLIC KEY BLOCK-----
 
 In the web UI, open menu:Automation Execution[Infrastructure > Credentials].
 
-. Click btn:[Create Credential].
+. Click btn:[&#x2295; Create credential].
 . Set:
 ** **Name:** `ansible-sign-cred`
 ** **Organization:** `Default`
 ** **Credential Type:** `GPG Public Key`
 . Paste the full public key from the clipboard into the text field.
-. Click btn:[Create Credential].
+. Click btn:[Create credential].
 
 This will add the public key as a Credential in your automation controller.
 
@@ -296,7 +296,7 @@ This will add the public key as a Credential in your automation controller.
 
 To configure the Gitea repository as a project you need an SCM credential. In menu:Automation Execution[Infrastructure > Credentials]:
 
-. Click btn:[Create credential].
+. Click btn:[&#x2295; Create credential].
 . Set:
 ** **Name:** `gitea-cred`
 ** **Organization:** `Default`
@@ -307,7 +307,7 @@ To configure the Gitea repository as a project you need an SCM credential. In me
 
 Create the project in menu:Automation Execution[Projects]:
 
-. Click btn:[Create project].
+. Click btn:[&#x2295; Create project].
 . Set:
 ** **Name:** `Signed Project`
 ** **Organization:** `Default`

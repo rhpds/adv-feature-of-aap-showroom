@@ -47,7 +47,7 @@ In your browser open {controller_url}[Ansible Automation Platform,window=blank] 
 Now, you set up the Workflow to bring together the work of the two teams.
 
 
-. Open menu:Automation Execution[Templates] and click btn:[Create template].
+. Open menu:Automation Execution[Templates] and click btn:[&#x2295; Create template].
 
 . Choose **Create workflow job template** and fill in as follows:
 +
