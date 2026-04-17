@@ -23,11 +23,11 @@ If you're familiar with previous versions of AAP, note that from now on, we will
 
 Your lab includes a number of servers:
 
-* A bastion host running VS Code server and Gitea server.
+* A bastion host running VS Code server, Gitea and an OPA (Open Policy Agent) server.
   You'll also use the command line there to do some Ansible development.
 * A one-node AAP cluster.
 * Two managed RHEL 9 hosts.
-* A Self-Service Portal RHEL appliance
+* A Self-Service Automation Portal (SSAP) RHEL appliance.
 
 [TIP]
 ====
