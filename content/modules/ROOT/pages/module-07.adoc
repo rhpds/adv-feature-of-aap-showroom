@@ -45,12 +45,10 @@ cd {gitea_controller_project}
 
 You have to configure git locally, run:
 
-[source,shell,role=execute,subs="attributes"]
+[source,shell,role=execute]
 ----
-cd ~/{gitea_controller_project}
 git config --global user.name "Your Name"
 git config --global user.email you@example.com
-cd
 ----
 
 == Sign Repository Content
@@ -342,11 +340,11 @@ Open the file `/home/{ssh_username}/{gitea_controller_project}/apache_install.ym
 
 Push the new version to the git repository:
 
-[source,shell,role=execute]
+[source,shell,role=execute,subs="attributes"]
 ----
-cd ~/playbooks-adv-controller/
+cd ~/{gitea_controller_project}
 git add apache_install.yml
-git commit -m "changing file"
+git commit -m "Changing file"
 git push
 ----
 

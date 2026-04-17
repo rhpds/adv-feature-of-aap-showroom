@@ -43,7 +43,7 @@ Some hints to get you started:
 * To **edit files** or **open a terminal window**, we provide a couple of methods detailed below.
 * You can click on any screenshot to magnify it in a new window or tab.
   Once done, simply close the window or tab to come back to the instructions.
-* Copy and esp paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the context menu summoned by a right mouse-click works well in Firefox and Chrome.
+* Copy and especially paste in the virtual terminals offered in your favourite web browser can be finicky using keyboard combinations, but using the context menu summoned by a right mouse-click works well in Firefox and Chrome.
 
 == Finding your way in the lab
 
