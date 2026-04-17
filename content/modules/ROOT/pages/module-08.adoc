@@ -24,17 +24,17 @@ First check that the OAuth application has been configured, this is needed becau
 Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}[window=blank] in a browser tab. Log in as `{controller_username}` with password `{controller_password}`. Then:
 
 . Open menu:Access Management[OAuth Applications].
-. Open the OAuth application named `Selfservice`.
-. **Confirm** it looks like this:
+. Open the OAuth application named `Selfservice` followed by a number.
+. **Confirm** it looks like this (apart from the number):
 +
 image::oauth-app.png[800,600,link=self,window=blank]
 
 You'll need to create a team called `aap-admins` belonging to the `Default` organization.
 
 . Open menu:Access Management[Teams].
-. Click btn:[Create team].
+. Click btn:[&#x2295; Create team].
 . Enter:
-** **Name:** `aap-admins`
+** **Name:** `aap-admins` (the exact name is important!)
 ** **Organization:** `Default`
 . Click btn:[Create team].
 

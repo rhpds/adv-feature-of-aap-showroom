@@ -153,12 +153,12 @@ Access your AAP UI from the menu:AAP[] tab in Showroom, or open {controller_url}
 You can directly proceed to adding the dynamic inventory and pointing it to the inventory script.
 
 . In the AAP web UI, open menu:Automation Execution[Infrastructure > Inventories].
-. To create a new inventory, open the btn:[Create inventory] drop-down and click btn:[Create inventory].
+. To create a new inventory, open the btn:[&#x2295; Create inventory] drop-down and click btn:[Create inventory].
 . Fill in the fields:
 ** **Name:** `Cloud inventory`
 ** **Organization:** `Default`
 . Click btn:[Create inventory].
-. Open the menu:Sources[] tab and click btn:[Create Source].
+. Open the menu:Sources[] tab and click btn:[&#x2295; Create source].
 . Fill in the fields:
 ** **Name:** `Cloud inventory Script`
 ** **Source:** `Sourced from a Project`

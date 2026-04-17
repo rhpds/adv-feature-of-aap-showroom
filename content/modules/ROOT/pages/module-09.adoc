@@ -32,12 +32,12 @@ The flow when using Policy Enforcement is this:
 * **Evaluation**: The engine compares the request against rego policies (the language used by OPA).
 * **Decision**: If the decision is `allow: true`, the job proceeds to execution. But with `allow: false` the job is blocked, and an error message is returned explaining which policy was violated.
 
-As always it is better to see this in action, so let us get started.
-If you have not already, log in to menu:Codeserver[] (password `{vscode_server_password}`) and AAP as `{controller_username}` with password `{controller_password}`.
+As always it is better to see this in action, so let us get started. Log in to AAP as `{controller_username}` with password `{controller_password}` and open a terminal (check xref:index.adoc#_accessing_your_lab_environment[how to access a terminal]).
 
-The first step is the rego policies. A set of policies is prepared for you; clone the repository on the bastion host and copy the policies into the OPA server policy directory:
+The first step concerns the rego policies.
+A set of policies has been prepared for you; clone the repository on the bastion host and copy the policies into the OPA server policy directory:
 
-In your terminal (how to access a terminal is described xref:index.adoc#_accessing_your_lab_environment[here]) run:
+In your terminal run:
 
 [source,shell,role=execute,subs="attributes"]
 ----

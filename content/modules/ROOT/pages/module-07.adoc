@@ -45,12 +45,10 @@ cd {gitea_controller_project}
 
 You have to configure git locally, run:
 
-[source,shell,role=execute,subs="attributes"]
+[source,shell,role=execute]
 ----
-cd ~/{gitea_controller_project}
 git config --global user.name "Your Name"
 git config --global user.email you@example.com
-cd
 ----
 
 == Sign Repository Content
@@ -284,13 +282,13 @@ Copy **all** of its contents **including** `-----BEGIN PGP PUBLIC KEY BLOCK-----
 
 In the web UI, open menu:Automation Execution[Infrastructure > Credentials].
 
-. Click btn:[Create Credential].
+. Click btn:[&#x2295; Create credential].
 . Set:
 ** **Name:** `ansible-sign-cred`
 ** **Organization:** `Default`
 ** **Credential Type:** `GPG Public Key`
 . Paste the full public key from the clipboard into the text field.
-. Click btn:[Create Credential].
+. Click btn:[Create credential].
 
 This will add the public key as a Credential in your automation controller.
 
@@ -298,7 +296,7 @@ This will add the public key as a Credential in your automation controller.
 
 To configure the Gitea repository as a project you need an SCM credential. In menu:Automation Execution[Infrastructure > Credentials]:
 
-. Click btn:[Create credential].
+. Click btn:[&#x2295; Create credential].
 . Set:
 ** **Name:** `gitea-cred`
 ** **Organization:** `Default`
@@ -309,7 +307,7 @@ To configure the Gitea repository as a project you need an SCM credential. In me
 
 Create the project in menu:Automation Execution[Projects]:
 
-. Click btn:[Create project].
+. Click btn:[&#x2295; Create project].
 . Set:
 ** **Name:** `Signed Project`
 ** **Organization:** `Default`
@@ -330,12 +328,6 @@ Open menu:Automation Execution[Jobs] and select the most recent project sync job
 [source,shell]
 ----
 PLAY [Perform project signature/checksum verification] *************************
-
-TASK [Verify project content using GPG signature] ******************************
-ok: [localhost]
-
-TASK [Verify project content against checksum manifest] ************************
-ok: [localhost]
 ----
 
 Above tasks indicate that the signature verification was successful.
@@ -348,10 +340,11 @@ Open the file `/home/{ssh_username}/{gitea_controller_project}/apache_install.ym
 
 Push the new version to the git repository:
 
-[source,shell,role=execute]
+[source,shell,role=execute,subs="attributes"]
 ----
+cd ~/{gitea_controller_project}
 git add apache_install.yml
-git commit -m "changing file"
+git commit -m "Changing file"
 git push
 ----
 
