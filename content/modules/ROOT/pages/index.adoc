@@ -112,7 +112,7 @@ There is a Showroom tab named **>_Terminal**, this will give you a plain termina
 ====
 You can of course use SSH directly to access the bastion node when you have an SSH client ready to go and know your way around:
 
-[source,sh,role="send-to-terminal",subs="attributes"]
+[source,sh,role="send-to-wetty",subs="attributes"]
 ----
 ssh {ssh_username}@{ssh_hostname} -p {ssh_port}
 ----
@@ -139,7 +139,7 @@ Without it, you would have to add parameters to each execution of `ansible-navig
 
 During this lab, you will always use `ansible-navigator` which supersedes the capabilities of `ansible-playbook`. Let's check Ansible Navigator has been installed correctly (if you use copy & paste for the first time, your browser might ask for permission for pasting):
 
-[source,sh,role="send-to-terminal",subs="attributes"]
+[source,sh,role="send-to-wetty",subs="attributes"]
 ----
 ansible-navigator --version
 ----
@@ -153,7 +153,7 @@ ansible-navigator 25.1.0
 
 Now have a look at your Ansible Navigator configuration file. It's a dot file in your user's home directory and can be printed to screen with the following command:
 
-[source,sh,role="send-to-terminal",subs="attributes"]
+[source,sh,role="send-to-wetty",subs="attributes"]
 ----
 cat ~/.ansible-navigator.yml
 ----
@@ -172,7 +172,7 @@ NOTE: For your convenience, we have pre-configured the authentication credential
 
 Run the `ansible-navigator` command with the `images` argument to look at execution environments configured on the control node:
 
-[source,sh,role="send-to-terminal",subs="attributes"]
+[source,sh,role="send-to-wetty",subs="attributes"]
 ----
 ansible-navigator images
 ----
