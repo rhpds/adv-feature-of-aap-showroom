@@ -6,21 +6,46 @@
 #   Task 2: extra_vars.rego exists at /var/lib/opa/policies/
 #   Task 3: maintenance_window.rego exists at /var/lib/opa/policies/
 #   Task 4: OPA server reachable on bastion:8181 (HTTP 200 or 204 from /health)
-#   Task 5: Demo Job Template has a non-empty policy field configured
+#   Task 5: Demo Job Template has a non-empty opa_query_path field configured
 #   Task 6: Demo Job Template has "maintenance" label associated (end-state)
 #   Task 7: maintenance_window.rego contains a window_start_hour value (file was patched)
 #   Task 8: Job history contains at least one policy-blocked (failed) job
 #   Task 9: Job history contains at least one allowed (successful) job
 #
-# All file and OPA checks run on bastion (where OPA and the .rego files live).
-# AAP API calls are made from bastion via curl (matching the solve.yml convention).
+# Notes:
+#   - AAP 2.5 unified gateway: REST API base is /api/controller/v2/ (not /api/v2/)
+#   - OPA field on job template: opa_query_path (not "policy")
+#   - All file and OPA checks run on bastion (where OPA and the .rego files live)
+#   - AAP API calls are made from bastion via curl
 
+# -------------------------------------------------------
+# Play 0 — Build dynamic bastion inventory from extravars
+# -------------------------------------------------------
+- name: Build bastion inventory
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: bastion
+        groups: bastion
+        ansible_host: "{{ bastion_host }}"
+        ansible_port: "{{ bastion_port | default(22) }}"
+        ansible_user: "{{ bastion_user | default('lab-user') }}"
+        ansible_password: "{{ bastion_password | default('') }}"
+        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: bastion_host | default('') | length > 0
+
+# -------------------------------------------------------
+# Play 1 — Validation tasks run on bastion
+# -------------------------------------------------------
 - name: Module 09 Validation — OPA Policy Enforcement
   hosts: bastion
   gather_facts: false
   vars:
     aap_url: "{{ controller_url | default('') }}"
-    aap_user: "{{ controller_username | default('admin') }}"
+    aap_user: "{{ controller_username | default('lab-user') }}"
     aap_pass: "{{ controller_password | default('') }}"
     opa_policy_dir: /var/lib/opa/policies
 
@@ -81,14 +106,13 @@
       when: r_maint_rego.stat.exists | default(false)
 
     # -------------------------------------------------------
-    # Discover Demo Job Template ID and policy field
+    # Discover Demo Job Template ID and opa_query_path field
     # Output: two lines — "JT_ID:<n>" and "JT_POLICY:<value>"
-    # Using separate lines avoids regex_search edge cases on empty policy
     # -------------------------------------------------------
-    - name: Get Demo Job Template ID and policy from AAP API
+    - name: Get Demo Job Template ID and opa_query_path from AAP API
       ansible.builtin.shell: |
         curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/v2/job_templates/?name=Demo+Job+Template" \
+          "{{ aap_url }}/api/controller/v2/job_templates/?name=Demo+Job+Template" \
           -H "Content-Type: application/json" | \
           python3 -c "
         import json, sys
@@ -100,7 +124,7 @@
         else:
             jt = results[0]
             print('JT_ID:' + str(jt.get('id', 'NOT_FOUND')))
-            print('JT_POLICY:' + str(jt.get('policy', '') or ''))
+            print('JT_POLICY:' + str(jt.get('opa_query_path', '') or ''))
         "
       register: r_jt_info
       changed_when: false
@@ -110,18 +134,18 @@
       ansible.builtin.set_fact:
         jt_id: "{{ (r_jt_info.stdout_lines | default([]) | select('match', '^JT_ID:') | list | first | default('JT_ID:NOT_FOUND'))[6:] }}"
 
-    - name: Parse Demo Job Template policy
+    - name: Parse Demo Job Template opa_query_path
       ansible.builtin.set_fact:
         jt_policy: "{{ (r_jt_info.stdout_lines | default([]) | select('match', '^JT_POLICY:') | list | first | default('JT_POLICY:'))[10:] }}"
 
     # -------------------------------------------------------
-    # Task 5 — check policy field is non-empty (done via jt_policy fact above)
+    # Task 5 — check opa_query_path field is non-empty (done via jt_policy fact above)
     # Task 6 — Demo Job Template has "maintenance" label associated
     # -------------------------------------------------------
     - name: Get labels associated with Demo Job Template
       ansible.builtin.shell: |
         curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/v2/job_templates/{{ jt_id }}/labels/" \
+          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/labels/" \
           -H "Content-Type: application/json" | \
           python3 -c "
         import json, sys
@@ -135,13 +159,13 @@
       when: jt_id != 'NOT_FOUND'
 
     # -------------------------------------------------------
-    # Tasks 8 and 9 — Job history: look at the 50 most recent jobs
+    # Tasks 8 and 9 — Job history: look at the 50 most recent jobs on Demo Job Template
     # Count failed (policy-blocked) and successful (policy-allowed) jobs
     # -------------------------------------------------------
     - name: Query recent jobs on Demo Job Template
       ansible.builtin.shell: |
         curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/v2/job_templates/{{ jt_id }}/jobs/?order_by=-id&page_size=50" \
+          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/jobs/?order_by=-id&page_size=50" \
           -H "Content-Type: application/json" | \
           python3 -c "
         import json, sys
@@ -188,7 +212,7 @@
     # Validate all tasks
     # -------------------------------------------------------
     - name: Validate all tasks
-      rhpds.ftl.validation_check:
+      validation_check:
         check: >-
           {{
             _task1_ok and _task2_ok and _task3_ok and _task4_ok
@@ -200,7 +224,7 @@
           Task 2: extra_vars.rego present in /var/lib/opa/policies/
           Task 3: maintenance_window.rego present in /var/lib/opa/policies/
           Task 4: OPA server reachable on bastion:8181
-          Task 5: Demo Job Template has policy enforcement configured (policy={{ jt_policy | default('') }})
+          Task 5: Demo Job Template has OPA policy enforcement configured (opa_query_path={{ jt_policy | default('') }})
           Task 6: Demo Job Template has "maintenance" label associated
           Task 7: maintenance_window.rego window_start_hour = {{ r_window_start.stdout | default('?') | trim }}
           Task 8: Job history has at least one policy-blocked (failed) job
@@ -210,8 +234,8 @@
           {{ 'Task 2: extra_vars.rego present' if _task2_ok else 'Task 2: FAILED — extra_vars.rego missing from ' + opa_policy_dir + '. Run Solve or clone opa-policy-enforcement and copy *.rego to ' + opa_policy_dir + '.' }}
           {{ 'Task 3: maintenance_window.rego present' if _task3_ok else 'Task 3: FAILED — maintenance_window.rego missing from ' + opa_policy_dir + '. Run Solve or clone opa-policy-enforcement and copy *.rego to ' + opa_policy_dir + '.' }}
           {{ 'Task 4: OPA server reachable on :8181' if _task4_ok else 'Task 4: FAILED — OPA health returned HTTP ' + (r_opa_health.stdout | default('000') | trim) + '. Check OPA service on bastion: sudo systemctl status opa' }}
-          {{ 'Task 5: Demo Job Template policy=' + (jt_policy | default('')) if _task5_ok else 'Task 5: FAILED — Demo Job Template not found or policy is empty. In the AAP UI open Demo Job Template -> Edit, set the Policy field to aap/deny (or aap/extravars, aap/maintenance) and save.' }}
+          {{ 'Task 5: Demo Job Template opa_query_path=' + (jt_policy | default('')) if _task5_ok else 'Task 5: FAILED — Demo Job Template not found or opa_query_path is empty. In the AAP UI open Demo Job Template -> Edit, set the OPA Query Path field to aap/deny (or aap/extravars, aap/maintenance) and save.' }}
           {{ 'Task 6: "maintenance" label associated with Demo Job Template' if _task6_ok else 'Task 6: FAILED — "maintenance" label not found on Demo Job Template. In the AAP UI open Demo Job Template -> Labels, add the "maintenance" label and save.' }}
           {{ 'Task 7: maintenance_window.rego window_start_hour = ' + (r_window_start.stdout | default('?') | trim) if _task7_ok else 'Task 7: FAILED — window_start_hour not set in maintenance_window.rego. Edit ' + opa_policy_dir + '/maintenance_window.rego and add: window_start_hour := <UTC hour>' }}
-          {{ 'Task 8: at least one policy-blocked job in history' if _task8_ok else 'Task 8: FAILED — No failed jobs on Demo Job Template. Set policy to aap/deny and launch the template; OPA should block it and record a failed job.' }}
-          {{ 'Task 9: at least one allowed (successful) job in history' if _task9_ok else 'Task 9: FAILED — No successful jobs on Demo Job Template. Set policy to aap/extravars with extra_vars color=blue and launch; OPA should allow the job to run.' }}
+          {{ 'Task 8: at least one policy-blocked job in history' if _task8_ok else 'Task 8: FAILED — No failed jobs on Demo Job Template. Set opa_query_path to aap/deny and launch the template; OPA should block it and record a failed job.' }}
+          {{ 'Task 9: at least one allowed (successful) job in history' if _task9_ok else 'Task 9: FAILED — No successful jobs on Demo Job Template. Set opa_query_path to aap/extravars with extra_vars color=blue and launch; OPA should allow the job to run.' }}
