@@ -1,0 +1,330 @@
+---
+# module-04 — Use surveys and RBAC to give users self-service access
+# Validation: verifies the durable outcomes of each student step
+
+- name: Module 04 Validation — Surveys and RBAC
+  hosts: bastions
+  gather_facts: false
+  vars:
+    student_user: "{{ user | default('') }}"
+    controller_url: "{{ controller_url | default('https://localhost:8443') }}"
+    controller_username: "{{ controller_username | default('admin') }}"
+    controller_password: "{{ controller_password | default('') }}"
+    node1_hostname: "{{ node1_hostname | default('') }}"
+    wfjt_name: "Deploy Webapplication"
+    nightshift_user: "nightshift"
+    nightshift_team: "NightShifters"
+    nightshift_role: "WorkflowNightShifter"
+
+  tasks:
+
+    # -------------------------------------------------------
+    # Prerequisite — look up IDs needed by later checks
+    # -------------------------------------------------------
+    - name: Look up "Deploy Webapplication" WFJT
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/workflow_job_templates/?name=Deploy+Webapplication"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_wfjt
+      ignore_errors: true
+
+    - name: Set WFJT ID fact
+      ansible.builtin.set_fact:
+        wfjt_id: "{{ r_wfjt.json.results[0].id | default('') }}"
+        _wfjt_found: "{{ r_wfjt.json.count | default(0) | int > 0 }}"
+      when: r_wfjt.json is defined
+
+    - name: Look up "WorkflowNightShifter" role definition
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/roledefinitions/?name=WorkflowNightShifter"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_role_lookup
+      ignore_errors: true
+
+    - name: Set role ID fact
+      ansible.builtin.set_fact:
+        nightshift_role_id: "{{ r_role_lookup.json.results[0].id | default('') }}"
+      when: r_role_lookup.json is defined
+
+    - name: Look up "NightShifters" team
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/teams/?name=NightShifters"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_team_lookup
+      ignore_errors: true
+
+    - name: Set team ID fact
+      ansible.builtin.set_fact:
+        nightshift_team_id: "{{ r_team_lookup.json.results[0].id | default('') }}"
+      when: r_team_lookup.json is defined
+
+    # -------------------------------------------------------
+    # Check 1 — Survey spec exists with var "content" (text) and survey_enabled=true
+    # -------------------------------------------------------
+    - name: Get survey spec for "Deploy Webapplication" WFJT
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/workflow_job_templates/{{ wfjt_id }}/survey_spec/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_survey_spec
+      ignore_errors: true
+      when: wfjt_id | default('') | length > 0
+
+    - name: Get WFJT details to check survey_enabled flag
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/workflow_job_templates/{{ wfjt_id }}/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_wfjt_detail
+      ignore_errors: true
+      when: wfjt_id | default('') | length > 0
+
+    # -------------------------------------------------------
+    # Check 2 — Most recent workflow job succeeded; NodeJS page returns survey string
+    # -------------------------------------------------------
+    - name: Get most recent workflow job for "Deploy Webapplication"
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/workflow_job_templates/{{ wfjt_id }}/workflow_jobs/?order_by=-id&page_size=1"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_last_job
+      ignore_errors: true
+      when: wfjt_id | default('') | length > 0
+
+    - name: Fetch NodeJS page content from node1
+      ansible.builtin.uri:
+        url: "http://{{ node1_hostname }}/nodejs"
+        method: GET
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_nodejs
+      ignore_errors: true
+      when: node1_hostname | default('') | length > 0
+
+    # -------------------------------------------------------
+    # Check 3 — Custom role "WorkflowNightShifter" with correct permissions
+    # -------------------------------------------------------
+    - name: Get "WorkflowNightShifter" role definition details
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/roledefinitions/?name=WorkflowNightShifter"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_role_detail
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 4 — User "nightshift" exists as Normal user in org Default
+    # -------------------------------------------------------
+    - name: Get "nightshift" user details
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/users/?username=nightshift"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_user_detail
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 5 — Team "NightShifters" exists in org Default
+    # -------------------------------------------------------
+    - name: Get "NightShifters" team details
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/teams/?name=NightShifters"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_team_detail
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 6 — User "nightshift" is a member of team "NightShifters"
+    # -------------------------------------------------------
+    - name: Check "nightshift" membership in "NightShifters" team
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/teams/{{ nightshift_team_id }}/users/?username=nightshift"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_team_member
+      ignore_errors: true
+      when: nightshift_team_id | default('') | length > 0
+
+    # -------------------------------------------------------
+    # Check 7 — Team "NightShifters" has role "WorkflowNightShifter" scoped to WFJT
+    # -------------------------------------------------------
+    - name: Check role assignment for NightShifters team on "Deploy Webapplication"
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/role_team_assignments/?team={{ nightshift_team_id }}&role_definition={{ nightshift_role_id }}&object_id={{ wfjt_id }}"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_role_assignment
+      ignore_errors: true
+      when:
+        - nightshift_team_id | default('') | length > 0
+        - nightshift_role_id | default('') | length > 0
+        - wfjt_id | default('') | length > 0
+
+    # -------------------------------------------------------
+    # Check 8 — nightshift user can only see count=1 WFJT (RBAC scope test)
+    # GET /api/v2/workflow_job_templates/ as nightshift
+    # -------------------------------------------------------
+    - name: Get nightshift user details to retrieve password (for RBAC test)
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/workflow_job_templates/"
+        method: GET
+        user: "{{ nightshift_user }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_nightshift_wfjt_list
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Build result facts
+    # -------------------------------------------------------
+    - name: Build task result facts
+      ansible.builtin.set_fact:
+        # Check 1: survey spec has a question with variable "content" of type "text" AND survey_enabled=true
+        _task1_ok: >-
+          {{
+            (r_survey_spec.json.spec | default([]) | selectattr('variable', 'equalto', 'content') | selectattr('type', 'equalto', 'text') | list | length > 0)
+            and (r_wfjt_detail.json.survey_enabled | default(false)) | bool
+          }}
+        # Check 2: most recent workflow job is successful AND nodejs page is reachable with content
+        _task2_ok: >-
+          {{
+            (r_last_job.json.results | default([]) | length > 0)
+            and (r_last_job.json.results[0].status | default('') == 'successful')
+            and (r_nodejs is defined and r_nodejs is not failed and r_nodejs is not skipped)
+            and (r_nodejs.status | default(0) == 200)
+          }}
+        # Check 3: custom role exists with correct content_type and all 3 permissions
+        _task3_ok: >-
+          {{
+            (r_role_detail.json.count | default(0) | int > 0)
+            and (r_role_detail.json.results[0].content_type | default('') == 'shared.workflowjobtemplate')
+            and ('shared.approve_workflowjobtemplate' in (r_role_detail.json.results[0].permissions | default([])))
+            and ('shared.execute_workflowjobtemplate' in (r_role_detail.json.results[0].permissions | default([])))
+            and ('shared.view_workflowjobtemplate' in (r_role_detail.json.results[0].permissions | default([])))
+          }}
+        # Check 4: user "nightshift" exists and is a Normal user (not superuser, not system_auditor)
+        _task4_ok: >-
+          {{
+            (r_user_detail.json.count | default(0) | int > 0)
+            and not (r_user_detail.json.results[0].is_superuser | default(true))
+            and not (r_user_detail.json.results[0].is_system_auditor | default(true))
+          }}
+        # Check 5: team "NightShifters" exists in org Default
+        _task5_ok: "{{ r_team_detail.json.count | default(0) | int > 0 }}"
+        # Check 6: nightshift is a member of NightShifters
+        _task6_ok: >-
+          {{
+            nightshift_team_id | default('') | length > 0
+            and r_team_member is defined
+            and r_team_member is not skipped
+            and (r_team_member.json.count | default(0) | int > 0)
+          }}
+        # Check 7: role assignment exists for NightShifters → WorkflowNightShifter → Deploy Webapplication
+        _task7_ok: >-
+          {{
+            nightshift_team_id | default('') | length > 0
+            and nightshift_role_id | default('') | length > 0
+            and wfjt_id | default('') | length > 0
+            and r_role_assignment is defined
+            and r_role_assignment is not skipped
+            and (r_role_assignment.json.count | default(0) | int > 0)
+          }}
+        # Check 8: nightshift user can only see exactly 1 WFJT (scoped access)
+        _task8_ok: >-
+          {{
+            r_nightshift_wfjt_list is defined
+            and r_nightshift_wfjt_list is not failed
+            and (r_nightshift_wfjt_list.json.count | default(0) | int == 1)
+          }}
+
+    # -------------------------------------------------------
+    # Validate all tasks
+    # -------------------------------------------------------
+    - name: Validate all tasks
+      rhpds.ftl.validation_check:
+        check: >-
+          {{
+            _task1_ok and _task2_ok and _task3_ok and _task4_ok
+            and _task5_ok and _task6_ok and _task7_ok and _task8_ok
+          }}
+        pass_msg: |
+          Task 1: Survey configured on "Deploy Webapplication" (var=content, type=text, survey_enabled=true)
+          Task 2: Most recent workflow job succeeded; NodeJS page is reachable on node1
+          Task 3: Custom role "WorkflowNightShifter" exists with approve/execute/view on workflowjobtemplate
+          Task 4: User "nightshift" exists as a Normal user
+          Task 5: Team "NightShifters" exists in org Default
+          Task 6: User "nightshift" is a member of team "NightShifters"
+          Task 7: Team "NightShifters" has role "WorkflowNightShifter" scoped to "Deploy Webapplication"
+          Task 8: User "nightshift" sees exactly 1 workflow job template (RBAC scope correct)
+        error_msg: |
+          {{ 'Task 1: Survey configured (var=content, type=text, survey_enabled=true)' if _task1_ok else 'Task 1: FAILED — Survey missing or survey_enabled=false on "Deploy Webapplication". Open the WFJT, go to Survey tab, add a Text question with variable "content", and enable the survey.' }}
+          {{ 'Task 2: Most recent workflow job succeeded; NodeJS page reachable' if _task2_ok else 'Task 2: FAILED — No successful workflow job found or NodeJS page not responding. Launch "Deploy Webapplication" with a survey content value and wait for it to complete.' }}
+          {{ 'Task 3: Custom role "WorkflowNightShifter" exists with correct permissions' if _task3_ok else 'Task 3: FAILED — Role "WorkflowNightShifter" missing or has wrong permissions. Create a custom role with content_type=workflowjobtemplate and approve/execute/view permissions.' }}
+          {{ 'Task 4: User "nightshift" exists as a Normal user' if _task4_ok else 'Task 4: FAILED — User "nightshift" not found or has elevated privileges. Create a Normal (non-superuser) user named "nightshift" in org Default.' }}
+          {{ 'Task 5: Team "NightShifters" exists in org Default' if _task5_ok else 'Task 5: FAILED — Team "NightShifters" not found. Create the team in org Default.' }}
+          {{ 'Task 6: User "nightshift" is a member of team "NightShifters"' if _task6_ok else 'Task 6: FAILED — User "nightshift" is not in team "NightShifters". Open the NightShifters team and add nightshift as a member.' }}
+          {{ 'Task 7: Team "NightShifters" has role "WorkflowNightShifter" scoped to "Deploy Webapplication"' if _task7_ok else 'Task 7: FAILED — Role assignment missing. Assign the WorkflowNightShifter role to the NightShifters team scoped to "Deploy Webapplication".' }}
+          {{ 'Task 8: User "nightshift" sees exactly 1 WFJT (RBAC scope correct)' if _task8_ok else 'Task 8: FAILED — nightshift user sees incorrect number of WFJTs. Verify the role assignment is scoped only to "Deploy Webapplication" and the user password matches controller_password.' }}

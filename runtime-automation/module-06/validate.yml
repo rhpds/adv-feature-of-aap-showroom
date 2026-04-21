@@ -1,0 +1,334 @@
+---
+- name: Module 06 — Constructed Inventory Validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    student_user: "{{ user | default('') }}"
+    controller_url: "{{ lookup('env', 'CONTROLLER_URL') | default('') }}"
+    controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default('admin') }}"
+    controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') | default('') }}"
+
+  tasks:
+
+    # -------------------------------------------------------
+    # Check 1 — Constructed Inventory exists (kind=constructed, org=Default)
+    # -------------------------------------------------------
+    - name: Get Default organisation ID
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/organizations/?name=Default"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_org
+      ignore_errors: true
+
+    - name: Set org_id fact
+      ansible.builtin.set_fact:
+        org_id: "{{ r_org.json.results[0].id | default('') }}"
+      when:
+        - r_org.json is defined
+        - r_org.json.results | default([]) | length > 0
+
+    - name: Default org_id when not resolved
+      ansible.builtin.set_fact:
+        org_id: ""
+      when: org_id is not defined
+
+    - name: Check Constructed Inventory exists (kind=constructed)
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/?name=Constructed+Inventory&kind=constructed&organization={{ org_id }}"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_constructed
+      ignore_errors: true
+
+    - name: Set constructed inventory facts
+      ansible.builtin.set_fact:
+        constructed_inv_id: "{{ r_constructed.json.results[0].id | default('') }}"
+        _task1_ok: "{{ r_constructed.json.count | default(0) | int > 0 }}"
+
+    # -------------------------------------------------------
+    # Check 2 — Cloud inventory and Lab inventory are input inventories
+    # -------------------------------------------------------
+    - name: Get input inventories of Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/input_inventories/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_input_invs
+      when: _task1_ok | bool
+      ignore_errors: true
+
+    - name: Set input inventory names fact
+      ansible.builtin.set_fact:
+        _input_inv_names: "{{ r_input_invs.json.results | default([]) | map(attribute='name') | list }}"
+      when: _task1_ok | bool
+
+    - name: Default input inventory names when check skipped
+      ansible.builtin.set_fact:
+        _input_inv_names: []
+      when: not _task1_ok | bool
+
+    - name: Set input inventory check fact
+      ansible.builtin.set_fact:
+        _task2_ok: >-
+          {{
+            ('Cloud inventory' in _input_inv_names) and
+            ('Lab inventory' in _input_inv_names)
+          }}
+
+    # -------------------------------------------------------
+    # Check 3 — Constructed inventory sync completed successfully
+    # -------------------------------------------------------
+    - name: Get inventory sources for Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/inventory_sources/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_sources
+      when: _task1_ok | bool
+      ignore_errors: true
+
+    - name: Set sync status fact
+      ansible.builtin.set_fact:
+        _task3_ok: >-
+          {{
+            _task1_ok | bool and
+            r_sources is not failed and
+            r_sources is not skipped and
+            (
+              r_sources.json.results | default([]) | length == 0 or
+              (
+                r_sources.json.results
+                | selectattr('status', 'equalto', 'successful')
+                | list | length > 0 and
+                r_sources.json.results
+                | selectattr('status', 'in', ['failed', 'error', 'canceled'])
+                | list | length == 0
+              )
+            )
+          }}
+
+    - name: Default sync status when skipped
+      ansible.builtin.set_fact:
+        _task3_ok: false
+      when: not _task1_ok | bool
+
+    # -------------------------------------------------------
+    # Check 4 — Hosts from both input inventories appear in Constructed Inventory
+    # -------------------------------------------------------
+    - name: Get all hosts in Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/hosts/?page_size=100"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_hosts
+      when: _task1_ok | bool
+      ignore_errors: true
+
+    - name: Set host count fact
+      ansible.builtin.set_fact:
+        _host_count: "{{ r_hosts.json.count | default(0) | int }}"
+        _task4_ok: "{{ r_hosts.json.count | default(0) | int > 0 }}"
+      when: _task1_ok | bool
+
+    - name: Default host facts when skipped
+      ansible.builtin.set_fact:
+        _host_count: 0
+        _task4_ok: false
+      when: not _task1_ok | bool
+
+    # -------------------------------------------------------
+    # Check 5 — Group "dyngroup" exists in Constructed Inventory
+    # -------------------------------------------------------
+    - name: Get all groups in Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/groups/?page_size=100"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_groups
+      when: _task1_ok | bool
+      ignore_errors: true
+
+    - name: Set group names fact
+      ansible.builtin.set_fact:
+        _group_names: "{{ r_groups.json.results | default([]) | map(attribute='name') | list }}"
+      when: _task1_ok | bool
+
+    - name: Default group names when skipped
+      ansible.builtin.set_fact:
+        _group_names: []
+      when: not _task1_ok | bool
+
+    - name: Set dyngroup check fact
+      ansible.builtin.set_fact:
+        _task5_ok: "{{ 'dyngroup' in _group_names }}"
+
+    # -------------------------------------------------------
+    # Check 6 — CLOUD3.cloud.example.com has ansible_host == "cloud3.cloud.example.com"
+    # -------------------------------------------------------
+    - name: Get CLOUD3 host from Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/hosts/?name=CLOUD3.cloud.example.com"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_cloud3
+      when: _task1_ok | bool
+      ignore_errors: true
+
+    - name: Set CLOUD3 ansible_host fact
+      ansible.builtin.set_fact:
+        _cloud3_ansible_host: >-
+          {{
+            r_cloud3.json.results[0].variables
+            | default('{}')
+            | from_yaml
+            | dict2items
+            | selectattr('key', 'equalto', 'ansible_host')
+            | map(attribute='value')
+            | list
+            | first
+            | default('')
+          }}
+      when:
+        - _task1_ok | bool
+        - r_cloud3 is not failed
+        - r_cloud3 is not skipped
+        - r_cloud3.json.count | default(0) | int > 0
+
+    - name: Default CLOUD3 ansible_host when not found
+      ansible.builtin.set_fact:
+        _cloud3_ansible_host: ""
+      when: >-
+        not _task1_ok | bool or
+        r_cloud3 is skipped or
+        r_cloud3 is failed or
+        r_cloud3.json.count | default(0) | int == 0
+
+    - name: Set CLOUD3 hostvar check fact
+      ansible.builtin.set_fact:
+        _task6_ok: "{{ _cloud3_ansible_host == 'cloud3.cloud.example.com' }}"
+
+    # -------------------------------------------------------
+    # Check 7 — Groups "production" and "development" exist
+    # -------------------------------------------------------
+    - name: Set production/development group facts
+      ansible.builtin.set_fact:
+        _task7_ok: >-
+          {{
+            ('production' in _group_names) and
+            ('development' in _group_names)
+          }}
+
+    # -------------------------------------------------------
+    # Check 8 — Architecture keyed groups exist (e.g. x86_64, ARM)
+    # -------------------------------------------------------
+    - name: Set architecture keyed group fact
+      ansible.builtin.set_fact:
+        _arch_groups: >-
+          {{
+            _group_names
+            | select('match', '^(x86_64|ARM|aarch64|arm64|i386|ppc64|s390x)$')
+            | list
+          }}
+        _task8_ok: >-
+          {{
+            _group_names
+            | select('match', '^(x86_64|ARM|aarch64|arm64|i386|ppc64|s390x)$')
+            | list | length > 0
+          }}
+
+    # -------------------------------------------------------
+    # Check 9 — server_type prefixed groups exist (separator becomes underscore)
+    # -------------------------------------------------------
+    - name: Set server_type keyed group fact
+      ansible.builtin.set_fact:
+        _server_type_groups: >-
+          {{
+            _group_names
+            | select('match', '^server_type_')
+            | list
+          }}
+        _task9_ok: >-
+          {{
+            _group_names
+            | select('match', '^server_type_')
+            | list | length > 0
+          }}
+
+    # -------------------------------------------------------
+    # Build results and run validation_check
+    # -------------------------------------------------------
+    - name: Build task results summary
+      ansible.builtin.set_fact:
+        _all_ok: >-
+          {{
+            _task1_ok | bool and
+            _task2_ok | bool and
+            _task3_ok | bool and
+            _task4_ok | bool and
+            _task5_ok | bool and
+            _task6_ok | bool and
+            _task7_ok | bool and
+            _task8_ok | bool and
+            _task9_ok | bool
+          }}
+
+    - name: Validate all tasks
+      rhpds.ftl.validation_check:
+        check: "{{ _all_ok | bool }}"
+        pass_msg: |
+          Task 1: Constructed Inventory exists in AAP (kind=constructed, org=Default)
+          Task 2: Cloud inventory and Lab inventory are both input inventories
+          Task 3: Constructed inventory sync completed successfully
+          Task 4: Hosts from input inventories appear in Constructed Inventory ({{ _host_count }} hosts)
+          Task 5: Group "dyngroup" exists in Constructed Inventory
+          Task 6: CLOUD3.cloud.example.com has ansible_host == "cloud3.cloud.example.com"
+          Task 7: Groups "production" and "development" both exist
+          Task 8: Architecture keyed groups exist ({{ _arch_groups | join(', ') }})
+          Task 9: server_type_ prefixed groups exist ({{ _server_type_groups | join(', ') }})
+        error_msg: |
+          {{ 'OK' if _task1_ok else 'FAILED' }} Task 1: Constructed Inventory — {{ 'found (id=' + constructed_inv_id | string + ')' if _task1_ok else 'NOT found — create an inventory named "Constructed Inventory" with kind=constructed in the Default org, or run Solve' }}
+          {{ 'OK' if _task2_ok else 'FAILED' }} Task 2: Input inventories — {{ 'Cloud inventory and Lab inventory linked' if _task2_ok else 'missing input inventories (found: ' + (_input_inv_names | join(', ') | default('none')) + ') — add both Cloud inventory and Lab inventory as input inventories' }}
+          {{ 'OK' if _task3_ok else 'FAILED' }} Task 3: Sync status — {{ 'successful' if _task3_ok else 'sync not yet successful — trigger a sync from the Constructed Inventory and wait for it to complete, then click Validate again' }}
+          {{ 'OK' if _task4_ok else 'FAILED' }} Task 4: Hosts in inventory — {{ _host_count | string + ' host(s) present' if _task4_ok else 'no hosts found — check that input inventories contain hosts and that the sync succeeded' }}
+          {{ 'OK' if _task5_ok else 'FAILED' }} Task 5: dyngroup — {{ 'present' if _task5_ok else 'NOT found — add a "groups" block with dyngroup condition to source_vars and re-sync' }}
+          {{ 'OK' if _task6_ok else 'FAILED' }} Task 6: CLOUD3 ansible_host — {{ 'cloud3.cloud.example.com (correct)' if _task6_ok else 'got "' + _cloud3_ansible_host + '" — add "ansible_host: inventory_hostname | lower()" to the compose block in source_vars and re-sync' }}
+          {{ 'OK' if _task7_ok else 'FAILED' }} Task 7: production / development groups — {{ 'both present' if _task7_ok else 'missing: ' + ([] + (['production'] if 'production' not in _group_names else []) + (['development'] if 'development' not in _group_names else [])) | join(', ') + ' — add groups block with search(prod) / search(dev) conditions to source_vars and re-sync' }}
+          {{ 'OK' if _task8_ok else 'FAILED' }} Task 8: Architecture keyed groups — {{ _arch_groups | join(', ') if _task8_ok else 'none found — add a keyed_groups entry with key: architecture (prefix/separator empty) to source_vars and re-sync' }}
+          {{ 'OK' if _task9_ok else 'FAILED' }} Task 9: server_type_ groups — {{ _server_type_groups | join(', ') if _task9_ok else 'none found — add a keyed_groups entry with prefix: server_type and key: type to source_vars and re-sync' }}

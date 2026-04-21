@@ -1,0 +1,104 @@
+---
+- name: Module 03 - Workflows Solve
+  hosts: bastion
+  gather_facts: false
+  vars:
+    controller_url: "{{ lookup('env', 'CONTROLLER_HOST') | default('https://localhost') }}"
+    node1_hostname: "{{ lookup('env', 'node1_hostname') | default('node1') }}"
+  environment:
+    CONTROLLER_HOST: "{{ controller_url }}"
+    CONTROLLER_USERNAME: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+    CONTROLLER_PASSWORD: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+    CONTROLLER_VERIFY_SSL: "false"
+
+  tasks:
+
+    # -----------------------------------------------------------------------
+    # Task 1 — Create "Deploy Webapplication" workflow job template
+    # Idempotent: awx.awx.workflow_job_template with state: present
+    # -----------------------------------------------------------------------
+    - name: Create Deploy Webapplication workflow job template with nodes
+      awx.awx.workflow_job_template:
+        name: "Deploy Webapplication"
+        organization: "Default"
+        state: present
+        workflow_nodes:
+          - identifier: "Web Infra Deploy"
+            unified_job_template:
+              organization:
+                name: Default
+              name: "Web Infra Deploy"
+              type: job_template
+            credentials: []
+            related:
+              success_nodes:
+                - identifier: "Web App Deploy"
+              failure_nodes: []
+              always_nodes: []
+              credentials: []
+          - identifier: "Web App Deploy"
+            unified_job_template:
+              organization:
+                name: Default
+              name: "Web App Deploy"
+              type: job_template
+            credentials: []
+            related:
+              success_nodes: []
+              failure_nodes: []
+              always_nodes: []
+              credentials: []
+      register: r_workflow
+      ignore_errors: true
+
+    - name: Report workflow template creation result
+      ansible.builtin.debug:
+        msg: "Workflow template created/updated: {{ r_workflow is not failed }}"
+
+    # -----------------------------------------------------------------------
+    # Task 2 — Launch "Deploy Webapplication" workflow and wait for completion
+    # -----------------------------------------------------------------------
+    - name: Launch Deploy Webapplication workflow job template
+      awx.awx.workflow_launch:
+        workflow_template: "Deploy Webapplication"
+        wait: true
+        timeout: 300
+      register: r_workflow_job
+      ignore_errors: true
+
+    - name: Set workflow job status fact
+      ansible.builtin.set_fact:
+        workflow_launched: "{{ r_workflow_job is not failed }}"
+        workflow_status: "{{ r_workflow_job.status | default('unknown') }}"
+
+    - name: Report workflow launch result
+      ansible.builtin.debug:
+        msg: "Workflow job launched. Status: {{ workflow_status }}"
+
+    # -----------------------------------------------------------------------
+    # Task 3 — Verify NodeJS application responds on node1
+    # block-01 from module: curl http://{{ node1_hostname }}/nodejs
+    # -----------------------------------------------------------------------
+    - name: Verify NodeJS application returns Hello World on node1
+      ansible.builtin.uri:
+        url: "http://{{ node1_hostname }}/nodejs"
+        method: GET
+        validate_certs: false
+        timeout: 15
+        status_code: [200]
+      register: r_nodejs
+      ignore_errors: true
+
+    - name: Set nodejs check fact
+      ansible.builtin.set_fact:
+        nodejs_ok: "{{ r_nodejs is not failed and 'Hello World' in (r_nodejs.content | default('')) }}"
+
+    # -----------------------------------------------------------------------
+    # Report
+    # -----------------------------------------------------------------------
+    - name: Report solve status
+      ansible.builtin.debug:
+        msg: |
+          Workflow template "Deploy Webapplication": {{ 'ok' if (r_workflow is not failed) else 'NOT ok - check AAP controller logs' }}
+          Workflow job launched and succeeded: {{ 'ok' if (workflow_status == 'successful') else 'NOT ok (status: ' + workflow_status + ')' }}
+          NodeJS app at http://{{ node1_hostname }}/nodejs: {{ 'ok (Hello World)' if nodejs_ok else 'NOT ok - workflow may still be running or deploy failed' }}

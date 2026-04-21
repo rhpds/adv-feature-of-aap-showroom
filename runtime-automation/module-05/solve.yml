@@ -1,0 +1,143 @@
+---
+# Module 05 Solve — Dynamic Inventories
+# Automates:
+#   1. Write dyninv.sh to bastion
+#   2. Make it executable
+#   3. Create "Cloud inventory" in AAP
+#   4. Add "Cloud inventory Script" source (scm, update_on_launch=true, cache=300)
+#   5. Trigger inventory sync
+
+- name: Module 05 Solve — add bastion to inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Add bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: bastion
+        ansible_user: "{{ ssh_username | default('lab-user') }}"
+        ansible_ssh_private_key_file: /app/.ssh/id_rsa
+        ansible_ssh_common_args: "-F /app/.ssh/config"
+
+# ─── Play 1: Write dyninv.sh ───────────────────────────────────────────────
+
+- name: Module 05 Solve — write dyninv.sh to bastion
+  hosts: bastion
+  gather_facts: false
+  vars:
+    ssh_user: "{{ ssh_username | default('lab-user') }}"
+    script_path: "/home/{{ ssh_username | default('lab-user') }}/dyninv.sh"
+  tasks:
+    - name: Write dynamic inventory script
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/bin/bash
+
+          if [ "$1" == "--list" ] ; then
+              curl -sS {{ gitea_url }}/{{ gitea_username }}/{{ gitea_controller_project | default('playbooks-adv-controller') }}/raw/branch/main/constructed-inventory/inventory_list
+          elif [ "$1" == "--host" ]; then
+              echo '{"_meta": {"hostvars": {}}}'
+          else
+              echo "{ }"
+          fi
+
+    - name: Verify dyninv.sh returns valid JSON
+      ansible.builtin.command:
+        cmd: "{{ script_path }} --list"
+      register: r_dyninv
+      changed_when: false
+      ignore_errors: true
+
+    - name: Show dyninv.sh output (first 200 chars)
+      ansible.builtin.debug:
+        msg: "dyninv.sh --list output: {{ r_dyninv.stdout[:200] | default('(empty)') }}"
+
+# ─── Play 2: Create AAP inventory and source via awx.awx collection ───────
+
+- name: Module 05 Solve — configure AAP Cloud inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_host: "{{ controller_url | default('') | regex_replace('^https?://', '') }}"
+    aap_username: "{{ controller_username | default('admin') }}"
+    aap_password: "{{ controller_password | default('') }}"
+    inventory_name: "Cloud inventory"
+    inventory_source_name: "Cloud inventory Script"
+  tasks:
+    - name: Create "Cloud inventory" in AAP
+      awx.awx.inventory:
+        name: "{{ inventory_name }}"
+        organization: "Default"
+        state: present
+        controller_host: "{{ aap_host }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: false
+      register: r_inventory
+      ignore_errors: true
+
+    - name: Debug inventory creation result
+      ansible.builtin.debug:
+        msg: "Inventory creation: {{ r_inventory.changed | default('unknown') }} — {{ r_inventory.msg | default('ok') }}"
+      ignore_errors: true
+
+    - name: Create "Cloud inventory Script" source
+      awx.awx.inventory_source:
+        name: "{{ inventory_source_name }}"
+        inventory: "{{ inventory_name }}"
+        source: scm
+        source_project: "Lab Project Repo"
+        source_path: "constructed-inventory/inventory-script"
+        update_on_launch: true
+        update_cache_timeout: 300
+        overwrite: true
+        overwrite_vars: true
+        organization: "Default"
+        state: present
+        controller_host: "{{ aap_host }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: false
+      register: r_source
+      ignore_errors: true
+
+    - name: Debug inventory source creation result
+      ansible.builtin.debug:
+        msg: "Source creation: {{ r_source.changed | default('unknown') }}"
+      ignore_errors: true
+
+    - name: Trigger inventory sync
+      awx.awx.inventory_source_update:
+        name: "{{ inventory_source_name }}"
+        inventory: "{{ inventory_name }}"
+        organization: "Default"
+        wait: false
+        controller_host: "{{ aap_host }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: false
+      register: r_sync
+      ignore_errors: true
+
+    - name: Debug sync trigger result
+      ansible.builtin.debug:
+        msg: "Sync triggered: {{ r_sync.status | default('unknown') }}"
+      ignore_errors: true
+
+# ─── Play 3: Report ────────────────────────────────────────────────────────
+
+- name: Module 05 Solve — report
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Report solve status
+      ansible.builtin.debug:
+        msg: |
+          dyninv.sh written and executable: check bastion:/home/{{ ssh_username | default('lab-user') }}/dyninv.sh
+          Cloud inventory created in AAP: check AAP UI -> Infrastructure -> Inventories
+          Cloud inventory Script source added (scm, update_on_launch=true, cache=300)
+          Inventory sync triggered (async) — come back in a few minutes and click Validate

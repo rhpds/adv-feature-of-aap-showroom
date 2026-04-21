@@ -1,0 +1,196 @@
+---
+# Module 02 Solve — Configure resources with Ansible
+#
+# What this playbook does:
+#   1. Verifies ~/.ansible-navigator.yml exists on bastion with CONTROLLER_HOST set
+#   2. Clones the gitea repo (playbooks-adv-controller) if not already present
+#   3. Runs ansible-navigator run configure-controller.yml from inside the repo
+#      (ansible-navigator uses the controller collection to create inventory, hosts,
+#       credentials, projects, and job templates in AAP via the REST API)
+#   4. Reports final status
+
+- name: Module 02 Solve — Configure resources with Ansible
+  hosts: bastion
+  gather_facts: false
+  vars:
+    gitea_url: "{{ gitea_url | default('') }}"
+    gitea_username: "{{ gitea_username | default('') }}"
+    gitea_password: "{{ gitea_password | default('') }}"
+    gitea_controller_project: "playbooks-adv-controller"
+    home_dir: "/home/lab-user"
+    repo_dir: "{{ home_dir }}/{{ gitea_controller_project }}"
+    navigator_cfg: "{{ home_dir }}/.ansible-navigator.yml"
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # Step 1 — Verify ~/.ansible-navigator.yml exists and has CONTROLLER_HOST
+    # -------------------------------------------------------------------------
+    - name: Check ~/.ansible-navigator.yml exists
+      ansible.builtin.stat:
+        path: "{{ navigator_cfg }}"
+      register: r_nav_cfg
+
+    - name: Set ansible-navigator.yml exists fact
+      ansible.builtin.set_fact:
+        _nav_cfg_exists: "{{ r_nav_cfg.stat.exists }}"
+
+    - name: Check CONTROLLER_HOST key present in ansible-navigator.yml
+      ansible.builtin.shell: "grep -q 'CONTROLLER_HOST' {{ navigator_cfg }} && echo found || echo missing"
+      register: r_nav_ctrl_host
+      changed_when: false
+      ignore_errors: true
+      when: _nav_cfg_exists
+
+    - name: Set CONTROLLER_HOST fact
+      ansible.builtin.set_fact:
+        _nav_ctrl_host_ok: "{{ (r_nav_ctrl_host.stdout | default('missing')) == 'found' }}"
+
+    # -------------------------------------------------------------------------
+    # Step 2 — Clone gitea repo (idempotent — skip if already cloned)
+    # -------------------------------------------------------------------------
+    - name: Check if repo directory already exists
+      ansible.builtin.stat:
+        path: "{{ repo_dir }}"
+      register: r_repo_dir
+
+    - name: Set repo dir exists fact
+      ansible.builtin.set_fact:
+        _repo_dir_exists: "{{ r_repo_dir.stat.exists and r_repo_dir.stat.isdir }}"
+
+    - name: Clone gitea repo ({{ gitea_controller_project }})
+      ansible.builtin.git:
+        repo: "{{ gitea_url }}/{{ gitea_username }}/{{ gitea_controller_project }}.git"
+        dest: "{{ repo_dir }}"
+        force: false
+        version: HEAD
+      when:
+        - not _repo_dir_exists
+        - gitea_url | length > 0
+        - gitea_username | length > 0
+      ignore_errors: true
+
+    - name: Check configure-controller.yml exists in repo
+      ansible.builtin.stat:
+        path: "{{ repo_dir }}/configure-controller.yml"
+      register: r_playbook_file
+
+    - name: Set playbook file exists fact
+      ansible.builtin.set_fact:
+        _playbook_exists: "{{ r_playbook_file.stat.exists }}"
+
+    # -------------------------------------------------------------------------
+    # Step 3 — Run ansible-navigator run configure-controller.yml
+    #   ansible-navigator picks up CONTROLLER_* env vars from ansible-navigator.yml
+    #   and runs the playbook inside the EE container image.
+    #   The playbook uses ansible.controller collection to create AAP resources.
+    #   Timeout: 10 minutes — project sync and initial runs take time.
+    # -------------------------------------------------------------------------
+    - name: Run configure-controller.yml via ansible-navigator
+      ansible.builtin.shell: |
+        cd {{ repo_dir }} && \
+        ansible-navigator run configure-controller.yml \
+          --mode stdout \
+          --pull-policy missing \
+          2>&1
+      register: r_navigator_run
+      changed_when: true
+      ignore_errors: true
+      async: 600
+      poll: 30
+      when: _playbook_exists
+
+    - name: Set navigator run success fact
+      ansible.builtin.set_fact:
+        _navigator_ok: "{{ r_navigator_run.rc | default(1) == 0 }}"
+
+    # -------------------------------------------------------------------------
+    # Step 4 — Verify AAP resources created via REST API
+    #   Uses the controller REST API (controller_url / controller_password extravars)
+    # -------------------------------------------------------------------------
+    - name: Check AAP inventory exists via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url | default('') }}/api/v2/inventories/?name=Workshop+Inventory"
+        method: GET
+        user: "{{ controller_username | default('admin') }}"
+        password: "{{ controller_password | default('') }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_inventory
+      ignore_errors: true
+      when: controller_url | default('') | length > 0
+
+    - name: Set inventory exists fact
+      ansible.builtin.set_fact:
+        _inventory_ok: "{{ (r_inventory.json.count | default(0)) > 0 }}"
+      when: r_inventory is not skipped and r_inventory.status | default(0) == 200
+
+    - name: Default inventory fact when skipped
+      ansible.builtin.set_fact:
+        _inventory_ok: false
+      when: r_inventory is skipped or r_inventory.status | default(0) != 200
+
+    - name: Check AAP projects exist via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url | default('') }}/api/v2/projects/?page_size=20"
+        method: GET
+        user: "{{ controller_username | default('admin') }}"
+        password: "{{ controller_password | default('') }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_projects
+      ignore_errors: true
+      when: controller_url | default('') | length > 0
+
+    - name: Set projects exist fact
+      ansible.builtin.set_fact:
+        _projects_ok: "{{ (r_projects.json.count | default(0)) > 0 }}"
+      when: r_projects is not skipped and r_projects.status | default(0) == 200
+
+    - name: Default projects fact when skipped
+      ansible.builtin.set_fact:
+        _projects_ok: false
+      when: r_projects is skipped or r_projects.status | default(0) != 200
+
+    - name: Check AAP job templates exist via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url | default('') }}/api/v2/job_templates/?page_size=20"
+        method: GET
+        user: "{{ controller_username | default('admin') }}"
+        password: "{{ controller_password | default('') }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_templates
+      ignore_errors: true
+      when: controller_url | default('') | length > 0
+
+    - name: Set job templates exist fact
+      ansible.builtin.set_fact:
+        _templates_ok: "{{ (r_templates.json.count | default(0)) > 0 }}"
+      when: r_templates is not skipped and r_templates.status | default(0) == 200
+
+    - name: Default job templates fact when skipped
+      ansible.builtin.set_fact:
+        _templates_ok: false
+      when: r_templates is skipped or r_templates.status | default(0) != 200
+
+    # -------------------------------------------------------------------------
+    # Report
+    # -------------------------------------------------------------------------
+    - name: Report solve status
+      ansible.builtin.debug:
+        msg: |
+          ~/.ansible-navigator.yml exists:       {{ 'ok' if _nav_cfg_exists else 'NOT ok' }}
+          CONTROLLER_HOST set in nav config:     {{ 'ok' if _nav_ctrl_host_ok else 'NOT ok' }}
+          repo cloned ({{ gitea_controller_project }}): {{ 'ok' if _repo_dir_exists or _playbook_exists else 'NOT ok' }}
+          configure-controller.yml present:     {{ 'ok' if _playbook_exists else 'NOT ok' }}
+          ansible-navigator run exit 0:         {{ 'ok' if _navigator_ok else 'NOT ok (rc=' + (r_navigator_run.rc | default('N/A') | string) + ')' }}
+          AAP inventory created:                {{ 'ok' if _inventory_ok else 'NOT ok' }}
+          AAP projects created:                 {{ 'ok' if _projects_ok else 'NOT ok' }}
+          AAP job templates created:            {{ 'ok' if _templates_ok else 'NOT ok' }}

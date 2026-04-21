@@ -1,0 +1,444 @@
+---
+# Module 07 Validate — Secure the Automation Supply Chain
+#
+# What this playbook checks (all durable outcomes):
+#   Task 1: GPG key for "VerySecure <student@localhost>" exists in bastion gpg keyring
+#   Task 2: ~/signing_demo.asc exists and contains "-----BEGIN PGP PUBLIC KEY BLOCK-----"
+#   Task 3: ansible-sign package is installed on bastion (rpm -q)
+#   Task 4: MANIFEST.in exists in the project root
+#   Task 5: .ansible-sign/sha256sum.txt exists in the project root
+#   Task 6: .ansible-sign/sha256sum.txt.sig exists in the project root
+#   Task 7: Signed commit with .ansible-sign/ was pushed to Gitea (git log check)
+#   Task 8: AAP credential "ansible-sign-cred" of type GPG Public Key exists
+#   Task 9: AAP credential "gitea-cred" of type Source Control exists
+#   Task 10: AAP project "Signed Project" exists with a signature_validation_credential set
+#   Task 11: Most recent successful sync of "Signed Project" before tamper succeeded
+#   Task 12: Most recent sync of "Signed Project" after tamper failed with "Checksum mismatch"
+#
+# Variables injected at runtime (via AgV extravars):
+#   ssh_username        — bastion OS user (default: lab-user)
+#   gitea_username      — Gitea login
+#   gitea_password      — Gitea password
+#   gitea_url           — e.g. https://gitea-GUID.apps...
+#   controller_url      — AAP controller base URL
+#   controller_username — AAP admin username
+#   controller_password — AAP admin password
+
+# ---------------------------------------------------------------------------
+# Play 0: Register bastion in in-memory inventory
+# ---------------------------------------------------------------------------
+- name: Module 07 Validate — Register bastion host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Add bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: bastion
+        ansible_user: "{{ ssh_username | default('lab-user') }}"
+        ansible_ssh_private_key_file: /app/.ssh/id_rsa
+        ansible_ssh_common_args: "-F /app/.ssh/config"
+
+# ---------------------------------------------------------------------------
+# Play 1: Filesystem and command checks on bastion
+# ---------------------------------------------------------------------------
+- name: Module 07 Validate — Bastion filesystem checks
+  hosts: bastion
+  gather_facts: false
+  vars:
+    ssh_username: "{{ ssh_username | default('lab-user') }}"
+    gitea_controller_project: "playbooks-adv-controller"
+    project_dir: "/home/{{ ssh_username }}/{{ gitea_controller_project }}"
+    signing_asc: "/home/{{ ssh_username }}/signing_demo.asc"
+
+  tasks:
+
+    # -------------------------------------------------------
+    # Check 1 — GPG key for VerySecure <student@localhost>
+    # -------------------------------------------------------
+    - name: Check VerySecure GPG key exists in bastion keyring
+      ansible.builtin.shell: |
+        gpg --list-keys 2>/dev/null | grep -q 'VerySecure' && echo exists || echo missing
+      register: r_gpg_key
+      changed_when: false
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 2 — ~/signing_demo.asc contains PGP header
+    # -------------------------------------------------------
+    - name: Check signing_demo.asc exists with PGP PUBLIC KEY BLOCK
+      ansible.builtin.shell: |
+        test -f {{ signing_asc }} \
+          && grep -q 'BEGIN PGP PUBLIC KEY BLOCK' {{ signing_asc }} \
+          && echo ok || echo missing
+      register: r_asc
+      changed_when: false
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 3 — ansible-sign rpm installed
+    # -------------------------------------------------------
+    - name: Check ansible-sign is installed via rpm
+      ansible.builtin.shell: |
+        rpm -q ansible-sign > /dev/null 2>&1 && echo installed || echo missing
+      register: r_ansiblesign
+      changed_when: false
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 4 — MANIFEST.in in project root
+    # -------------------------------------------------------
+    - name: Check MANIFEST.in exists in project root
+      ansible.builtin.stat:
+        path: "{{ project_dir }}/MANIFEST.in"
+      register: r_manifest
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 5 — .ansible-sign/sha256sum.txt exists
+    # -------------------------------------------------------
+    - name: Check .ansible-sign/sha256sum.txt exists
+      ansible.builtin.stat:
+        path: "{{ project_dir }}/.ansible-sign/sha256sum.txt"
+      register: r_sha256
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 6 — .ansible-sign/sha256sum.txt.sig exists
+    # -------------------------------------------------------
+    - name: Check .ansible-sign/sha256sum.txt.sig exists
+      ansible.builtin.stat:
+        path: "{{ project_dir }}/.ansible-sign/sha256sum.txt.sig"
+      register: r_sig
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Check 7 — Signed commit with .ansible-sign/ pushed to Gitea
+    # -------------------------------------------------------
+    - name: Check signed commit exists in git log (contains .ansible-sign path)
+      ansible.builtin.shell: |
+        cd {{ project_dir }}
+        git log --oneline --name-only --diff-filter=A HEAD~10..HEAD 2>/dev/null \
+          | grep -q '\.ansible-sign' && echo pushed || echo missing
+      register: r_git_signed
+      changed_when: false
+      ignore_errors: true
+
+    # -------------------------------------------------------
+    # Collect bastion facts for Play 2
+    # -------------------------------------------------------
+    - name: Set bastion check facts
+      ansible.builtin.set_fact:
+        _gpg_key_ok: "{{ (r_gpg_key.stdout | default('') | trim) == 'exists' }}"
+        _asc_ok: "{{ (r_asc.stdout | default('') | trim) == 'ok' }}"
+        _ansiblesign_ok: "{{ (r_ansiblesign.stdout | default('') | trim) == 'installed' }}"
+        _manifest_ok: "{{ r_manifest.stat.exists | default(false) }}"
+        _sha256_ok: "{{ r_sha256.stat.exists | default(false) }}"
+        _sig_ok: "{{ r_sig.stat.exists | default(false) }}"
+        _git_signed_ok: "{{ (r_git_signed.stdout | default('') | trim) == 'pushed' }}"
+
+# ---------------------------------------------------------------------------
+# Play 2: AAP API checks from localhost
+# ---------------------------------------------------------------------------
+- name: Module 07 Validate — AAP API checks
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    student_user: "{{ user | default('') }}"
+    controller_url: "{{ controller_url | default('') }}"
+    controller_username: "{{ controller_username | default('admin') }}"
+    controller_password: "{{ controller_password | default('') }}"
+    aap_api: "{{ controller_url }}/api/v2"
+
+  tasks:
+
+    # -------------------------------------------------------
+    # Check 8 — ansible-sign-cred exists (GPG Public Key type)
+    # -------------------------------------------------------
+    - name: Query ansible-sign-cred from AAP
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/credentials/?name=ansible-sign-cred"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+        return_content: true
+      register: r_asc_cred
+      ignore_errors: true
+
+    - name: Resolve GPG Public Key credential type ID
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/credential_types/?name=GPG+Public+Key"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+        return_content: true
+      register: r_gpg_type
+      ignore_errors: true
+
+    - name: Set ansible-sign-cred check fact
+      ansible.builtin.set_fact:
+        _gpg_type_id: >-
+          {{
+            ((r_gpg_type.json.results | default([]) | first).id | default(''))
+            if r_gpg_type.json is defined and r_gpg_type.json.results | default([]) | length > 0
+            else ''
+          }}
+
+    - name: Evaluate ansible-sign-cred presence and type
+      ansible.builtin.set_fact:
+        _asc_cred_ok: >-
+          {{
+            r_asc_cred.json is defined
+            and r_asc_cred.json.count | default(0) | int > 0
+            and _gpg_type_id | string | length > 0
+            and ((r_asc_cred.json.results | first).credential_type | default('') | string) == (_gpg_type_id | string)
+          }}
+
+    # -------------------------------------------------------
+    # Check 9 — gitea-cred exists (Source Control type)
+    # -------------------------------------------------------
+    - name: Query gitea-cred from AAP
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/credentials/?name=gitea-cred"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+        return_content: true
+      register: r_gitea_cred
+      ignore_errors: true
+
+    - name: Resolve Source Control credential type ID
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/credential_types/?name=Source+Control"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+        return_content: true
+      register: r_scm_type
+      ignore_errors: true
+
+    - name: Set SCM type ID fact
+      ansible.builtin.set_fact:
+        _scm_type_id: >-
+          {{
+            ((r_scm_type.json.results | default([]) | first).id | default(''))
+            if r_scm_type.json is defined and r_scm_type.json.results | default([]) | length > 0
+            else ''
+          }}
+
+    - name: Evaluate gitea-cred presence and type
+      ansible.builtin.set_fact:
+        _gitea_cred_ok: >-
+          {{
+            r_gitea_cred.json is defined
+            and r_gitea_cred.json.count | default(0) | int > 0
+            and _scm_type_id | string | length > 0
+            and ((r_gitea_cred.json.results | first).credential_type | default('') | string) == (_scm_type_id | string)
+          }}
+
+    # -------------------------------------------------------
+    # Check 10 — "Signed Project" exists with signature_validation_credential set
+    # -------------------------------------------------------
+    - name: Query "Signed Project" from AAP
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/projects/?name=Signed+Project"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+        return_content: true
+      register: r_project
+      ignore_errors: true
+
+    - name: Set project ID and validation credential fact
+      ansible.builtin.set_fact:
+        _project_id: >-
+          {{
+            (r_project.json.results | first).id | default('')
+            if r_project.json is defined and r_project.json.count | default(0) | int > 0
+            else ''
+          }}
+        _project_ok: >-
+          {{
+            r_project.json is defined
+            and r_project.json.count | default(0) | int > 0
+            and (r_project.json.results | first).signature_validation_credential is not none
+            and (r_project.json.results | first).signature_validation_credential | default('') | string | length > 0
+          }}
+
+    # -------------------------------------------------------
+    # Check 11 + 12 — Project sync history:
+    #   Most recent sync = failed (Checksum mismatch)
+    #   A prior sync     = successful
+    # We retrieve the last 5 project_updates ordered by -id.
+    # -------------------------------------------------------
+    - name: Fetch recent project_updates for "Signed Project"
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/projects/{{ _project_id }}/project_updates/?order_by=-id&page_size=5"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+        return_content: true
+      register: r_updates
+      when: _project_id | string | length > 0
+      ignore_errors: true
+
+    - name: Set sync history facts (initial successful + tamper failed)
+      ansible.builtin.set_fact:
+        _updates_list: "{{ r_updates.json.results | default([]) }}"
+      when: r_updates is not skipped and r_updates.json is defined
+
+    - name: Default sync facts when project not found
+      ansible.builtin.set_fact:
+        _updates_list: []
+      when: _project_id | string | length == 0
+
+    - name: Evaluate initial successful sync fact
+      ansible.builtin.set_fact:
+        _initial_sync_ok: >-
+          {{
+            _updates_list | selectattr('status', 'equalto', 'successful') | list | length > 0
+          }}
+
+    - name: Evaluate most recent sync is failed (tamper detected)
+      ansible.builtin.set_fact:
+        _tamper_sync_failed: >-
+          {{
+            _updates_list | length > 0
+            and (_updates_list | first).status == 'failed'
+          }}
+
+    - name: Set failed job ID for stdout check
+      ansible.builtin.set_fact:
+        _failed_job_id: >-
+          {{
+            (_updates_list | first).id | default('')
+            if _updates_list | length > 0 and (_updates_list | first).status == 'failed'
+            else ''
+          }}
+
+    # -------------------------------------------------------
+    # Check 12b — Confirm "Checksum mismatch" appears in failed job output
+    # -------------------------------------------------------
+    - name: Fetch failed sync job stdout
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/project_updates/{{ _failed_job_id }}/stdout/?format=txt"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 15
+        status_code: [200]
+        return_content: true
+      register: r_failed_stdout
+      when: _failed_job_id | string | length > 0
+      ignore_errors: true
+
+    - name: Evaluate "Checksum mismatch" in failed sync output
+      ansible.builtin.set_fact:
+        _checksum_mismatch_ok: >-
+          {{
+            r_failed_stdout is not skipped
+            and r_failed_stdout.content is defined
+            and 'Checksum mismatch' in r_failed_stdout.content
+          }}
+      when: _failed_job_id | string | length > 0
+
+    - name: Default checksum mismatch fact when not checked
+      ansible.builtin.set_fact:
+        _checksum_mismatch_ok: false
+      when: _failed_job_id | string | length == 0
+
+    # -------------------------------------------------------
+    # Pull bastion facts into this play
+    # -------------------------------------------------------
+    - name: Pull bastion check facts into localhost play
+      ansible.builtin.set_fact:
+        _gpg_key_ok: "{{ hostvars['bastion']['_gpg_key_ok'] | default(false) }}"
+        _asc_ok: "{{ hostvars['bastion']['_asc_ok'] | default(false) }}"
+        _ansiblesign_ok: "{{ hostvars['bastion']['_ansiblesign_ok'] | default(false) }}"
+        _manifest_ok: "{{ hostvars['bastion']['_manifest_ok'] | default(false) }}"
+        _sha256_ok: "{{ hostvars['bastion']['_sha256_ok'] | default(false) }}"
+        _sig_ok: "{{ hostvars['bastion']['_sig_ok'] | default(false) }}"
+        _git_signed_ok: "{{ hostvars['bastion']['_git_signed_ok'] | default(false) }}"
+
+    # -------------------------------------------------------
+    # Build final task result booleans
+    # -------------------------------------------------------
+    - name: Build task results
+      ansible.builtin.set_fact:
+        _task1_ok: "{{ _gpg_key_ok | bool }}"
+        _task2_ok: "{{ _asc_ok | bool }}"
+        _task3_ok: "{{ _ansiblesign_ok | bool }}"
+        _task4_ok: "{{ _manifest_ok | bool }}"
+        _task5_ok: "{{ _sha256_ok | bool }}"
+        _task6_ok: "{{ _sig_ok | bool }}"
+        _task7_ok: "{{ _git_signed_ok | bool }}"
+        _task8_ok: "{{ _asc_cred_ok | bool }}"
+        _task9_ok: "{{ _gitea_cred_ok | bool }}"
+        _task10_ok: "{{ _project_ok | bool }}"
+        _task11_ok: "{{ _initial_sync_ok | bool }}"
+        _task12_ok: "{{ _tamper_sync_failed | bool and _checksum_mismatch_ok | bool }}"
+
+    # -------------------------------------------------------
+    # Validate all tasks
+    # -------------------------------------------------------
+    - name: Validate all tasks
+      rhpds.ftl.validation_check:
+        check: >-
+          {{
+            _task1_ok and _task2_ok and _task3_ok and _task4_ok
+            and _task5_ok and _task6_ok and _task7_ok and _task8_ok
+            and _task9_ok and _task10_ok and _task11_ok and _task12_ok
+          }}
+        pass_msg: |
+          Task 1: GPG key VerySecure <student@localhost> exists in keyring
+          Task 2: ~/signing_demo.asc exists with PGP PUBLIC KEY BLOCK header
+          Task 3: ansible-sign package is installed
+          Task 4: MANIFEST.in exists in project root
+          Task 5: .ansible-sign/sha256sum.txt exists in project root
+          Task 6: .ansible-sign/sha256sum.txt.sig exists in project root
+          Task 7: Signed commit with .ansible-sign/ pushed to Gitea
+          Task 8: AAP credential ansible-sign-cred (GPG Public Key) exists
+          Task 9: AAP credential gitea-cred (Source Control) exists
+          Task 10: AAP project Signed Project exists with signature validation credential set
+          Task 11: Signed Project had a successful sync (before tamper)
+          Task 12: Most recent sync of Signed Project failed with Checksum mismatch (tamper detected)
+        error_msg: |
+          {{ 'OK' if _task1_ok else 'FAILED' }} Task 1: GPG key VerySecure <student@localhost> in keyring — {{ 'present' if _task1_ok else 'run: gpg --batch --gen-key ~/gpg.txt' }}
+          {{ 'OK' if _task2_ok else 'FAILED' }} Task 2: ~/signing_demo.asc with PGP header — {{ 'present' if _task2_ok else 'run: gpg --output ~/signing_demo.asc --armor --export' }}
+          {{ 'OK' if _task3_ok else 'FAILED' }} Task 3: ansible-sign installed — {{ 'installed' if _task3_ok else 'run: sudo dnf install -y ansible-sign' }}
+          {{ 'OK' if _task4_ok else 'FAILED' }} Task 4: MANIFEST.in in project root — {{ 'present' if _task4_ok else 'create MANIFEST.in in ~/playbooks-adv-controller/ as shown in the lab' }}
+          {{ 'OK' if _task5_ok else 'FAILED' }} Task 5: .ansible-sign/sha256sum.txt — {{ 'present' if _task5_ok else 'run: ansible-sign project gpg-sign ~/playbooks-adv-controller' }}
+          {{ 'OK' if _task6_ok else 'FAILED' }} Task 6: .ansible-sign/sha256sum.txt.sig — {{ 'present' if _task6_ok else 'run: ansible-sign project gpg-sign ~/playbooks-adv-controller' }}
+          {{ 'OK' if _task7_ok else 'FAILED' }} Task 7: Signed commit in Gitea — {{ 'found' if _task7_ok else 'git add .ansible-sign/ MANIFEST.in && git commit && git push' }}
+          {{ 'OK' if _task8_ok else 'FAILED' }} Task 8: ansible-sign-cred (GPG Public Key) in AAP — {{ 'found' if _task8_ok else 'create GPG Public Key credential named ansible-sign-cred in AAP' }}
+          {{ 'OK' if _task9_ok else 'FAILED' }} Task 9: gitea-cred (Source Control) in AAP — {{ 'found' if _task9_ok else 'create Source Control credential named gitea-cred in AAP' }}
+          {{ 'OK' if _task10_ok else 'FAILED' }} Task 10: Signed Project with signature validation — {{ 'configured' if _task10_ok else 'create project named Signed Project with signature validation credential set' }}
+          {{ 'OK' if _task11_ok else 'FAILED' }} Task 11: Signed Project had a successful sync — {{ 'found' if _task11_ok else 'trigger a project sync and wait for it to succeed' }}
+          {{ 'OK' if _task12_ok else 'FAILED' }} Task 12: Tamper sync failed with Checksum mismatch — {{ 'confirmed' if _task12_ok else 'tamper apache_install.yml, commit+push, trigger sync, then validate again' }}

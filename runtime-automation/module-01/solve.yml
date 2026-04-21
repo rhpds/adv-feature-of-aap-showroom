@@ -1,0 +1,93 @@
+---
+# Module 01 — Introduction to Unified UI
+# Solve playbook
+#
+# What the student does in this module:
+#   prose-01: Navigate to AAP login page at {{ controller_url }}
+#   prose-02: Log in with {{ controller_username }} / {{ controller_password }}
+#   prose-03/04/05: Read informational orientation content (skipped — no automatable action)
+#
+# Automation strategy:
+#   - No VM-side state is created in this module (orientation only)
+#   - "Navigate and log in" is replaced by two REST checks:
+#       1. GET {{ controller_url }}          → HTTP 200 (UI reachable)
+#       2. GET {{ controller_url }}/api/v2/me/ with Basic Auth → HTTP 200 (credentials valid)
+#   - Both checks run from localhost inside the runner container over HTTPS
+
+- name: Module 01 — Introduction to Unified UI Solve
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_url: "{{ controller_url | default('') }}"
+    aap_user: "{{ controller_username | default('admin') }}"
+    aap_pass: "{{ controller_password | default('') }}"
+
+  tasks:
+
+    # ------------------------------------------------------------------
+    # Guard: nothing to do if controller_url was not injected
+    # ------------------------------------------------------------------
+    - name: Fail early if controller_url is not set
+      ansible.builtin.fail:
+        msg: "controller_url extravar is empty — check AgV extravars injection"
+      when: aap_url | length == 0
+
+    # ------------------------------------------------------------------
+    # prose-01 — Check AAP login page is reachable (HTTP 200)
+    # ------------------------------------------------------------------
+    - name: Check AAP controller URL is reachable
+      ansible.builtin.uri:
+        url: "{{ aap_url }}"
+        method: GET
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        follow_redirects: all
+      register: r_url_check
+      ignore_errors: true
+
+    - name: Record URL reachability result
+      ansible.builtin.set_fact:
+        _url_ok: "{{ r_url_check.status | default(0) == 200 }}"
+
+    # ------------------------------------------------------------------
+    # prose-02 — Verify login credentials via AAP REST API
+    #   GET /api/v2/me/ returns 200 + user data when Basic Auth is valid.
+    #   Returns 401 on bad credentials.
+    # ------------------------------------------------------------------
+    - name: Verify AAP credentials via API (GET /api/v2/me/)
+      ansible.builtin.uri:
+        url: "{{ aap_url }}/api/v2/me/"
+        method: GET
+        url_username: "{{ aap_user }}"
+        url_password: "{{ aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_login_check
+      ignore_errors: true
+
+    - name: Record login result
+      ansible.builtin.set_fact:
+        _login_ok: "{{ r_login_check.status | default(0) == 200 }}"
+
+    # ------------------------------------------------------------------
+    # prose-03/04/05 — Informational orientation content
+    # SKIP: No automatable action — student reads menu descriptions only
+    # ------------------------------------------------------------------
+    # prose-03: Overview / Dashboard read-through
+    # prose-04: Menu items read-through (Automation Execution, Decisions, etc.)
+    # prose-05: Responsive UI note
+    # These produce no persistent state that can be checked.
+
+    # ------------------------------------------------------------------
+    # Report
+    # ------------------------------------------------------------------
+    - name: Report solve status
+      ansible.builtin.debug:
+        msg: |
+          AAP controller URL reachable : {{ 'ok' if _url_ok else 'NOT ok — ' ~ (r_url_check.msg | default('no response')) }}
+          AAP credentials valid        : {{ 'ok' if _login_ok else 'NOT ok — check controller_username / controller_password extravars' }}

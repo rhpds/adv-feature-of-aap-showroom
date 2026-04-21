@@ -1,0 +1,185 @@
+---
+# Module 02 Validate — Configure resources with Ansible
+#
+# Checks (all durable outcomes):
+#   1. ~/.ansible-navigator.yml exists on bastion and contains CONTROLLER_HOST
+#   2. ~/playbooks-adv-controller/configure-controller.yml exists on bastion
+#   3. AAP inventory created — GET /api/v2/inventories/ count > 0
+#   4. At least 2 hosts in AAP inventory — GET /api/v2/hosts/ count >= 2
+#   5. Machine credential created — GET /api/v2/credentials/?credential_type__namespace=ssh count > 0
+#   6. At least one project synced successfully — GET /api/v2/projects/?status=successful count > 0
+#   7. Job templates created — GET /api/v2/job_templates/ count > 0
+
+- name: Module 02 Validation — Configure resources with Ansible
+  hosts: bastion
+  gather_facts: false
+  vars:
+    student_user: "{{ user | default('') }}"
+    home_dir: "/home/lab-user"
+    gitea_controller_project: "playbooks-adv-controller"
+    repo_dir: "{{ home_dir }}/{{ gitea_controller_project }}"
+    navigator_cfg: "{{ home_dir }}/.ansible-navigator.yml"
+    controller_url: "{{ controller_url | default('') }}"
+    controller_username: "{{ controller_username | default('admin') }}"
+    controller_password: "{{ controller_password | default('') }}"
+
+  tasks:
+
+    # -------------------------------------------------------
+    # Check 1 — ~/.ansible-navigator.yml exists with CONTROLLER_HOST
+    # -------------------------------------------------------
+    - name: Check ~/.ansible-navigator.yml exists on bastion
+      ansible.builtin.stat:
+        path: "{{ navigator_cfg }}"
+      register: r_nav_cfg
+
+    - name: Check CONTROLLER_HOST key is present in ~/.ansible-navigator.yml
+      ansible.builtin.shell: "grep -q 'CONTROLLER_HOST' {{ navigator_cfg }} && echo found || echo missing"
+      register: r_ctrl_host
+      changed_when: false
+      ignore_errors: true
+      when: r_nav_cfg.stat.exists | default(false)
+
+    # -------------------------------------------------------
+    # Check 2 — repo cloned and configure-controller.yml present
+    # -------------------------------------------------------
+    - name: Check configure-controller.yml exists in cloned repo
+      ansible.builtin.stat:
+        path: "{{ repo_dir }}/configure-controller.yml"
+      register: r_playbook_file
+
+    # -------------------------------------------------------
+    # Check 3 — AAP inventory created (count > 0)
+    # Delegated to localhost so runner can reach controller_url over HTTPS
+    # -------------------------------------------------------
+    - name: Check AAP inventory exists via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/?page_size=5"
+        method: GET
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_inventories
+      ignore_errors: true
+      delegate_to: localhost
+      when: controller_url | length > 0
+
+    # -------------------------------------------------------
+    # Check 4 — At least 2 hosts in inventory
+    # -------------------------------------------------------
+    - name: Check AAP hosts count via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/hosts/?page_size=5"
+        method: GET
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_hosts
+      ignore_errors: true
+      delegate_to: localhost
+      when: controller_url | length > 0
+
+    # -------------------------------------------------------
+    # Check 5 — Machine credential created (credential_type__namespace=ssh)
+    # -------------------------------------------------------
+    - name: Check machine credential exists via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/credentials/?credential_type__namespace=ssh&page_size=5"
+        method: GET
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_credentials
+      ignore_errors: true
+      delegate_to: localhost
+      when: controller_url | length > 0
+
+    # -------------------------------------------------------
+    # Check 6 — At least one project synced successfully
+    # -------------------------------------------------------
+    - name: Check AAP projects synced successfully via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/projects/?status=successful&page_size=5"
+        method: GET
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_projects
+      ignore_errors: true
+      delegate_to: localhost
+      when: controller_url | length > 0
+
+    # -------------------------------------------------------
+    # Check 7 — Job templates created (count > 0)
+    # -------------------------------------------------------
+    - name: Check AAP job templates exist via REST API
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/job_templates/?page_size=5"
+        method: GET
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_templates
+      ignore_errors: true
+      delegate_to: localhost
+      when: controller_url | length > 0
+
+    # -------------------------------------------------------
+    # Build task result facts
+    # -------------------------------------------------------
+    - name: Build task results
+      ansible.builtin.set_fact:
+        _task1_ok: >-
+          {{
+            (r_nav_cfg.stat.exists | default(false)) | bool
+            and ('found' in (r_ctrl_host.stdout | default('')))
+          }}
+        _task2_ok: "{{ r_playbook_file.stat.exists | default(false) | bool }}"
+        _task3_ok: "{{ (r_inventories.json.count | default(0)) | int > 0 }}"
+        _task4_ok: "{{ (r_hosts.json.count | default(0)) | int >= 2 }}"
+        _task5_ok: "{{ (r_credentials.json.count | default(0)) | int > 0 }}"
+        _task6_ok: "{{ (r_projects.json.count | default(0)) | int > 0 }}"
+        _task7_ok: "{{ (r_templates.json.count | default(0)) | int > 0 }}"
+
+    # -------------------------------------------------------
+    # Validate all tasks
+    # -------------------------------------------------------
+    - name: Validate all tasks
+      rhpds.ftl.validation_check:
+        check: "{{ _task1_ok and _task2_ok and _task3_ok and _task4_ok and _task5_ok and _task6_ok and _task7_ok }}"
+        pass_msg: |
+          Task 1: ~/.ansible-navigator.yml exists with CONTROLLER_HOST configured
+          Task 2: playbooks-adv-controller/configure-controller.yml present on bastion
+          Task 3: AAP inventory created
+          Task 4: At least 2 hosts in AAP inventory
+          Task 5: Machine credential created
+          Task 6: At least one project synced successfully
+          Task 7: Job templates created
+        error_msg: |
+          {{ '  ok' if _task1_ok else 'FAILED' }} Task 1: ~/.ansible-navigator.yml{{ ' missing or CONTROLLER_HOST not set — check cat ~/.ansible-navigator.yml on bastion' if not _task1_ok else ' with CONTROLLER_HOST ok' }}
+          {{ '  ok' if _task2_ok else 'FAILED' }} Task 2: configure-controller.yml{{ ' missing — run: git clone <gitea_url>/<user>/playbooks-adv-controller.git on bastion' if not _task2_ok else ' present in repo' }}
+          {{ '  ok' if _task3_ok else 'FAILED' }} Task 3: AAP inventory{{ ' not found — run ansible-navigator run configure-controller.yml on bastion' if not _task3_ok else ' created' }}
+          {{ '  ok' if _task4_ok else 'FAILED' }} Task 4: AAP hosts{{ ' count < 2 — re-run configure-controller.yml to add hosts to inventory' if not _task4_ok else ' (>=2) present in inventory' }}
+          {{ '  ok' if _task5_ok else 'FAILED' }} Task 5: Machine credential{{ ' missing — re-run configure-controller.yml to create SSH credential' if not _task5_ok else ' created' }}
+          {{ '  ok' if _task6_ok else 'FAILED' }} Task 6: Project sync{{ ' has no successful syncs yet — wait a moment and click Validate again, or re-run configure-controller.yml' if not _task6_ok else ' successful' }}
+          {{ '  ok' if _task7_ok else 'FAILED' }} Task 7: Job templates{{ ' missing — re-run configure-controller.yml on bastion' if not _task7_ok else ' created' }}

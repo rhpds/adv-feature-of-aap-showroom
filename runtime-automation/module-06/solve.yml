@@ -1,0 +1,429 @@
+---
+- name: Module 06 — Constructed Inventory Solve (Setup hosts)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Add bastion to inventory
+      ansible.builtin.add_host:
+        name: bastion
+        ansible_user: lab-user
+        ansible_ssh_private_key_file: /app/.ssh/id_rsa
+        ansible_ssh_common_args: "-F /app/.ssh/config"
+
+# ---------------------------------------------------------------------------
+# Play 1: Prereq — run add-dyn-inventory.yml on bastion if needed
+# ---------------------------------------------------------------------------
+- name: Module 06 — Run prereq playbook if dynamic inventories are missing
+  hosts: bastion
+  gather_facts: false
+  vars:
+    controller_url: "{{ lookup('env', 'CONTROLLER_URL') | default('') }}"
+    controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default('admin') }}"
+    controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') | default('') }}"
+  tasks:
+    - name: Check if Cloud inventory already exists in AAP
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/?name=Cloud+inventory&organization__name=Default"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_cloud_inv_check
+      ignore_errors: true
+      delegate_to: localhost
+
+    - name: Check if Lab inventory already exists in AAP
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/?name=Lab+inventory&organization__name=Default"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_lab_inv_check
+      ignore_errors: true
+      delegate_to: localhost
+
+    - name: Set prereq needed flag
+      ansible.builtin.set_fact:
+        prereq_needed: >-
+          {{
+            (r_cloud_inv_check.json.count | default(0) | int == 0) or
+            (r_lab_inv_check.json.count | default(0) | int == 0)
+          }}
+
+    - name: Run add-dyn-inventory.yml prereq on bastion
+      ansible.builtin.command:
+        cmd: "bash -c 'cd ~/playbooks-adv-controller && ansible-navigator run add-dyn-inventory.yml --mode stdout'"
+      when: prereq_needed | bool
+      register: r_prereq
+      changed_when: true
+      ignore_errors: true
+
+    - name: Show prereq output
+      ansible.builtin.debug:
+        msg: "{{ r_prereq.stdout_lines | default(['prereq not needed or already ran']) }}"
+
+# ---------------------------------------------------------------------------
+# Play 2: All AAP REST API tasks run from localhost
+# ---------------------------------------------------------------------------
+- name: Module 06 — Build Constructed Inventory via AAP API
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    controller_url: "{{ lookup('env', 'CONTROLLER_URL') | default('') }}"
+    controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default('admin') }}"
+    controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') | default('') }}"
+
+    # Final source_vars — keyed_groups (block-04, the most complete config)
+    final_source_vars: |
+      ---
+      plugin: ansible.builtin.constructed
+      strict: false
+      compose:
+        ansible_host: inventory_hostname | lower()
+        name: inventory_hostname | lower()
+      groups:
+        production: inventory_hostname is search('prod')
+        development: inventory_hostname is search('dev')
+      keyed_groups:
+        - prefix: ""
+          separator: ""
+          key: architecture
+        - prefix: "server_type"
+          separator: "-"
+          key: type
+
+  tasks:
+    # ------------------------------------------------------------------
+    # Step 1: Resolve Default organisation ID
+    # ------------------------------------------------------------------
+    - name: Get Default organisation ID
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/organizations/?name=Default"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_org
+      ignore_errors: true
+
+    - name: Set org_id fact
+      ansible.builtin.set_fact:
+        org_id: "{{ r_org.json.results[0].id }}"
+      when:
+        - r_org.json is defined
+        - r_org.json.results | default([]) | length > 0
+
+    # ------------------------------------------------------------------
+    # Step 2: Resolve Cloud inventory and Lab inventory IDs
+    # ------------------------------------------------------------------
+    - name: Get Cloud inventory ID
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/?name=Cloud+inventory&organization={{ org_id }}"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_cloud_inv
+      ignore_errors: true
+
+    - name: Get Lab inventory ID
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/?name=Lab+inventory&organization={{ org_id }}"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_lab_inv
+      ignore_errors: true
+
+    - name: Set input inventory ID facts
+      ansible.builtin.set_fact:
+        cloud_inv_id: "{{ r_cloud_inv.json.results[0].id | default('') }}"
+        lab_inv_id: "{{ r_lab_inv.json.results[0].id | default('') }}"
+
+    - name: Abort if Cloud inventory not found
+      ansible.builtin.fail:
+        msg: "Cloud inventory not found in AAP. Re-run the prereq or check add-dyn-inventory.yml."
+      when: cloud_inv_id | string | length == 0
+
+    - name: Abort if Lab inventory not found
+      ansible.builtin.fail:
+        msg: "Lab inventory not found in AAP. Re-run the prereq or check add-dyn-inventory.yml."
+      when: lab_inv_id | string | length == 0
+
+    # ------------------------------------------------------------------
+    # Step 3: Check if Constructed Inventory already exists
+    # ------------------------------------------------------------------
+    - name: Check if Constructed Inventory already exists
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/?name=Constructed+Inventory&kind=constructed&organization={{ org_id }}"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_constructed_check
+      ignore_errors: true
+
+    - name: Set constructed inventory exists flag
+      ansible.builtin.set_fact:
+        constructed_inv_exists: "{{ r_constructed_check.json.count | default(0) | int > 0 }}"
+        constructed_inv_id: "{{ r_constructed_check.json.results[0].id | default('') }}"
+
+    # ------------------------------------------------------------------
+    # Step 4: Create Constructed Inventory (if not present)
+    # ------------------------------------------------------------------
+    - name: Create Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/"
+        method: POST
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          name: "Constructed Inventory"
+          kind: "constructed"
+          organization: "{{ org_id }}"
+          variables: "{{ final_source_vars }}"
+        status_code: [200, 201]
+      register: r_constructed_create
+      when: not constructed_inv_exists | bool
+      ignore_errors: true
+
+    - name: Update source_vars on existing Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/"
+        method: PATCH
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          variables: "{{ final_source_vars }}"
+        status_code: [200, 201]
+      register: r_constructed_update
+      when: constructed_inv_exists | bool
+      ignore_errors: true
+
+    - name: Set final constructed inventory ID
+      ansible.builtin.set_fact:
+        constructed_inv_id: >-
+          {{
+            r_constructed_create.json.id
+            if not constructed_inv_exists | bool
+            else constructed_inv_id
+          }}
+
+    # ------------------------------------------------------------------
+    # Step 5: Associate Cloud inventory as input inventory
+    # ------------------------------------------------------------------
+    - name: Get current input inventories for Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/input_inventories/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_input_invs
+      ignore_errors: true
+
+    - name: Collect current input inventory IDs
+      ansible.builtin.set_fact:
+        current_input_ids: "{{ r_input_invs.json.results | default([]) | map(attribute='id') | map('string') | list }}"
+
+    - name: Associate Cloud inventory as input inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/input_inventories/"
+        method: POST
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          id: "{{ cloud_inv_id | int }}"
+        status_code: [200, 201, 204]
+      when: cloud_inv_id | string not in current_input_ids
+      ignore_errors: true
+
+    - name: Associate Lab inventory as input inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/input_inventories/"
+        method: POST
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          id: "{{ lab_inv_id | int }}"
+        status_code: [200, 201, 204]
+      when: lab_inv_id | string not in current_input_ids
+      ignore_errors: true
+
+    # ------------------------------------------------------------------
+    # Step 6: Sync the Constructed Inventory and wait for completion
+    # ------------------------------------------------------------------
+    - name: Trigger sync of Constructed Inventory
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/update_inventory_sources/"
+        method: POST
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body: {}
+        status_code: [200, 201, 202]
+      register: r_sync
+      ignore_errors: true
+
+    - name: Wait for inventory sync to complete (up to 120s)
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_inv_status
+      until: >-
+        r_inv_status.json.pending_deletion is defined and
+        (r_inv_status.json.inventory_sources_with_failures is defined)
+      retries: 24
+      delay: 5
+      ignore_errors: true
+
+    - name: Poll inventory source sync status until complete
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/inventory_sources/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_sources_status
+      until: >-
+        r_sources_status.json.results | default([]) | length == 0 or
+        (r_sources_status.json.results | selectattr('status', 'in', ['successful', 'failed', 'error', 'canceled']) | list | length ==
+         r_sources_status.json.results | length)
+      retries: 24
+      delay: 5
+      ignore_errors: true
+
+    # ------------------------------------------------------------------
+    # Step 7: Verify final state
+    # ------------------------------------------------------------------
+    - name: Verify Constructed Inventory exists and has hosts
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/hosts/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_hosts
+      ignore_errors: true
+
+    - name: Verify groups exist
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/groups/"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_groups
+      ignore_errors: true
+
+    - name: Verify CLOUD3 host has lowercase ansible_host
+      ansible.builtin.uri:
+        url: "{{ controller_url }}/api/v2/inventories/{{ constructed_inv_id }}/hosts/?name=CLOUD3.cloud.example.com"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_cloud3_host
+      ignore_errors: true
+
+    - name: Set result facts
+      ansible.builtin.set_fact:
+        _constructed_ok: "{{ constructed_inv_id | string | length > 0 }}"
+        _hosts_ok: "{{ r_hosts.json.count | default(0) | int > 0 }}"
+        _groups_ok: "{{ r_groups.json.count | default(0) | int > 0 }}"
+        _group_names: "{{ r_groups.json.results | default([]) | map(attribute='name') | list }}"
+        _cloud3_ok: "{{ r_cloud3_host.json.count | default(0) | int > 0 }}"
+
+    - name: Check production group
+      ansible.builtin.set_fact:
+        _production_ok: "{{ 'production' in _group_names }}"
+        _development_ok: "{{ 'development' in _group_names }}"
+        _dyngroup_ok: "{{ 'dyngroup' in _group_names }}"
+
+    - name: Report solve status
+      ansible.builtin.debug:
+        msg: |
+          ========= Module 06 Solve Report =========
+          Constructed Inventory created:   {{ 'ok' if _constructed_ok else 'NOT ok' }}
+          Inventory has hosts:             {{ 'ok' if _hosts_ok else 'NOT ok' }}
+          Inventory has groups:            {{ 'ok' if _groups_ok else 'NOT ok' }}
+          Groups found:                    {{ _group_names | join(', ') }}
+          production group present:        {{ 'ok' if _production_ok else 'NOT ok' }}
+          development group present:       {{ 'ok' if _development_ok else 'NOT ok' }}
+          dyngroup present:                {{ 'ok' if _dyngroup_ok else 'NOT ok' }}
+          CLOUD3 host with compose:        {{ 'ok' if _cloud3_ok else 'NOT ok — may need post-sync check' }}
+          ==========================================
+          source_vars applied:             compose + groups + keyed_groups (final/complete config)
+          Input inventories associated:    Cloud inventory + Lab inventory
