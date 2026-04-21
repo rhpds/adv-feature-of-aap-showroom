@@ -15,10 +15,14 @@ ui:
     snapshot: true
   supplemental_files:
     - path: ./content/supplemental-ui
+    - path: ./content/lib
+    - path: ui.yml
+      contents: "static_files: [ .nojekyll, css/site-extra.css, js/buttons.js ]"
 
 antora:
   extensions:
     - '@sntke/antora-mermaid-extension'
+    - require: ./content/lib/inject-buttons.js
 
 runtime:
   fetch: true
