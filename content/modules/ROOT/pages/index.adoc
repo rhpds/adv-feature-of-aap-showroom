@@ -192,16 +192,3 @@ To get back to the previous view in `ansible-navigator` press kbd:[Esc], if need
 The last press in the main menu will get you out of Navigator.
 Alternatively you can type kbd:[:q] anywhere to exit at once (familiar with Vi?).
 
-=====
-.End to End validation
-[%collapsible]
-====
-++++
-<div class="solve-button-placeholder" data-module="module-02"></div>
-++++
-
-
-++++
-<div class="validate-button-placeholder" data-module="module-02"></div>
-++++
-====
