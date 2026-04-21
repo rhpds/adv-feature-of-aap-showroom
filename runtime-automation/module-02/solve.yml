@@ -8,20 +8,67 @@
 #      (ansible-navigator uses the controller collection to create inventory, hosts,
 #       credentials, projects, and job templates in AAP via the REST API)
 #   4. Reports final status
+#
+# Notes:
+#   - AAP 2.5 unified gateway: REST API base is /api/controller/v2/ (not /api/v2/)
+#   - gitea_url is derived from controller_url if not provided as an extravar
+#   - controller_url, controller_username, controller_password come from user_data.yml
 
+# -------------------------------------------------------------------------
+# Play 1 — Build dynamic bastion inventory from extravars
+# -------------------------------------------------------------------------
+- name: Build bastion inventory
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: bastion
+        groups: bastion
+        ansible_host: "{{ bastion_host }}"
+        ansible_port: "{{ bastion_port | default(22) }}"
+        ansible_user: "{{ bastion_user | default('lab-user') }}"
+        ansible_password: "{{ bastion_password | default('') }}"
+        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: bastion_host | default('') | length > 0
+
+# -------------------------------------------------------------------------
+# Play 2 — Run solve steps on bastion
+# -------------------------------------------------------------------------
 - name: Module 02 Solve — Configure resources with Ansible
   hosts: bastion
   gather_facts: false
   vars:
-    gitea_url: "{{ gitea_url | default('') }}"
-    gitea_username: "{{ gitea_username | default('') }}"
-    gitea_password: "{{ gitea_password | default('') }}"
     gitea_controller_project: "playbooks-adv-controller"
     home_dir: "/home/lab-user"
     repo_dir: "{{ home_dir }}/{{ gitea_controller_project }}"
     navigator_cfg: "{{ home_dir }}/.ansible-navigator.yml"
+    # AAP 2.5 unified gateway REST API base path
+    controller_api_base: "{{ controller_url | default('') }}/api/controller/v2"
 
   tasks:
+
+    # -------------------------------------------------------------------------
+    # Derive gitea_url from controller_url if not already provided.
+    # controller_url: https://controller-<guid>.apps.<domain>
+    # gitea_url:      https://gitea-<guid>.apps.<domain>
+    # -------------------------------------------------------------------------
+    - name: Derive gitea connection vars from controller_url when not provided
+      ansible.builtin.set_fact:
+        _effective_gitea_url: "{{ controller_url | default('') | regex_replace('https://controller-', 'https://gitea-') }}"
+        _effective_gitea_username: "{{ bastion_user | default('lab-user') }}"
+        _effective_gitea_password: "{{ controller_password | default('') }}"
+
+    - name: Override gitea vars with provided extravars if given
+      ansible.builtin.set_fact:
+        _effective_gitea_url: "{{ gitea_url }}"
+      when: gitea_url is defined and gitea_url | length > 0
+
+    - name: Override gitea username with provided extravar if given
+      ansible.builtin.set_fact:
+        _effective_gitea_username: "{{ gitea_username }}"
+      when: gitea_username is defined and gitea_username | length > 0
 
     # -------------------------------------------------------------------------
     # Step 1 — Verify ~/.ansible-navigator.yml exists and has CONTROLLER_HOST
@@ -60,14 +107,14 @@
 
     - name: Clone gitea repo ({{ gitea_controller_project }})
       ansible.builtin.git:
-        repo: "{{ gitea_url }}/{{ gitea_username }}/{{ gitea_controller_project }}.git"
+        repo: "{{ _effective_gitea_url }}/{{ _effective_gitea_username }}/{{ gitea_controller_project }}.git"
         dest: "{{ repo_dir }}"
         force: false
         version: HEAD
       when:
         - not _repo_dir_exists
-        - gitea_url | length > 0
-        - gitea_username | length > 0
+        - _effective_gitea_url | length > 0
+        - _effective_gitea_username | length > 0
       ignore_errors: true
 
     - name: Check configure-controller.yml exists in repo
@@ -92,6 +139,8 @@
         ansible-navigator run configure-controller.yml \
           --mode stdout \
           --pull-policy missing \
+          -e gitea_url="{{ _effective_gitea_url }}" \
+          -e gitea_username="{{ _effective_gitea_username }}" \
           2>&1
       register: r_navigator_run
       changed_when: true
@@ -106,11 +155,11 @@
 
     # -------------------------------------------------------------------------
     # Step 4 — Verify AAP resources created via REST API
-    #   Uses the controller REST API (controller_url / controller_password extravars)
+    #   AAP 2.5 unified gateway: /api/controller/v2/ (not /api/v2/)
     # -------------------------------------------------------------------------
     - name: Check AAP inventory exists via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url | default('') }}/api/v2/inventories/?name=Workshop+Inventory"
+        url: "{{ controller_api_base }}/inventories/?name=Lab+inventory"
         method: GET
         user: "{{ controller_username | default('admin') }}"
         password: "{{ controller_password | default('') }}"
@@ -120,6 +169,7 @@
         status_code: [200]
       register: r_inventory
       ignore_errors: true
+      delegate_to: localhost
       when: controller_url | default('') | length > 0
 
     - name: Set inventory exists fact
@@ -134,7 +184,7 @@
 
     - name: Check AAP projects exist via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url | default('') }}/api/v2/projects/?page_size=20"
+        url: "{{ controller_api_base }}/projects/?page_size=20"
         method: GET
         user: "{{ controller_username | default('admin') }}"
         password: "{{ controller_password | default('') }}"
@@ -144,6 +194,7 @@
         status_code: [200]
       register: r_projects
       ignore_errors: true
+      delegate_to: localhost
       when: controller_url | default('') | length > 0
 
     - name: Set projects exist fact
@@ -158,7 +209,7 @@
 
     - name: Check AAP job templates exist via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url | default('') }}/api/v2/job_templates/?page_size=20"
+        url: "{{ controller_api_base }}/job_templates/?page_size=20"
         method: GET
         user: "{{ controller_username | default('admin') }}"
         password: "{{ controller_password | default('') }}"
@@ -168,6 +219,7 @@
         status_code: [200]
       register: r_templates
       ignore_errors: true
+      delegate_to: localhost
       when: controller_url | default('') | length > 0
 
     - name: Set job templates exist fact

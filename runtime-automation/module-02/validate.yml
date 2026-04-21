@@ -4,12 +4,34 @@
 # Checks (all durable outcomes):
 #   1. ~/.ansible-navigator.yml exists on bastion and contains CONTROLLER_HOST
 #   2. ~/playbooks-adv-controller/configure-controller.yml exists on bastion
-#   3. AAP inventory created — GET /api/v2/inventories/ count > 0
-#   4. At least 2 hosts in AAP inventory — GET /api/v2/hosts/ count >= 2
-#   5. Machine credential created — GET /api/v2/credentials/?credential_type__namespace=ssh count > 0
-#   6. At least one project synced successfully — GET /api/v2/projects/?status=successful count > 0
-#   7. Job templates created — GET /api/v2/job_templates/ count > 0
+#   3. AAP inventory created — GET /api/controller/v2/inventories/ count > 0
+#   4. At least 2 hosts in AAP inventory — GET /api/controller/v2/hosts/ count >= 2
+#   5. Machine credential created — GET /api/controller/v2/credentials/?credential_type__namespace=ssh count > 0
+#   6. At least one project synced successfully — GET /api/controller/v2/projects/?status=successful count > 0
+#   7. Job templates created — GET /api/controller/v2/job_templates/ count > 0
 
+# -------------------------------------------------------
+# Play 1 — Build dynamic bastion inventory from extravars
+# -------------------------------------------------------
+- name: Build bastion inventory
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: bastion
+        groups: bastion
+        ansible_host: "{{ bastion_host }}"
+        ansible_port: "{{ bastion_port | default(22) }}"
+        ansible_user: "{{ bastion_user | default('lab-user') }}"
+        ansible_password: "{{ bastion_password | default('') }}"
+        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: bastion_host | default('') | length > 0
+
+# -------------------------------------------------------
+# Play 2 — Run all checks against bastion and controller
+# -------------------------------------------------------
 - name: Module 02 Validation — Configure resources with Ansible
   hosts: bastion
   gather_facts: false
@@ -51,10 +73,11 @@
     # -------------------------------------------------------
     # Check 3 — AAP inventory created (count > 0)
     # Delegated to localhost so runner can reach controller_url over HTTPS
+    # AAP 2.5 unified gateway uses /api/controller/v2/ (not /api/v2/)
     # -------------------------------------------------------
     - name: Check AAP inventory exists via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/inventories/?page_size=5"
+        url: "{{ controller_url }}/api/controller/v2/inventories/?page_size=5"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
@@ -73,7 +96,7 @@
     # -------------------------------------------------------
     - name: Check AAP hosts count via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/hosts/?page_size=5"
+        url: "{{ controller_url }}/api/controller/v2/hosts/?page_size=5"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
@@ -92,7 +115,7 @@
     # -------------------------------------------------------
     - name: Check machine credential exists via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/credentials/?credential_type__namespace=ssh&page_size=5"
+        url: "{{ controller_url }}/api/controller/v2/credentials/?credential_type__namespace=ssh&page_size=5"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
@@ -111,7 +134,7 @@
     # -------------------------------------------------------
     - name: Check AAP projects synced successfully via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/projects/?status=successful&page_size=5"
+        url: "{{ controller_url }}/api/controller/v2/projects/?status=successful&page_size=5"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
@@ -130,7 +153,7 @@
     # -------------------------------------------------------
     - name: Check AAP job templates exist via REST API
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/job_templates/?page_size=5"
+        url: "{{ controller_url }}/api/controller/v2/job_templates/?page_size=5"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
@@ -165,7 +188,7 @@
     # Validate all tasks
     # -------------------------------------------------------
     - name: Validate all tasks
-      rhpds.ftl.validation_check:
+      validation_check:
         check: "{{ _task1_ok and _task2_ok and _task3_ok and _task4_ok and _task5_ok and _task6_ok and _task7_ok }}"
         pass_msg: |
           Task 1: ~/.ansible-navigator.yml exists with CONTROLLER_HOST configured
