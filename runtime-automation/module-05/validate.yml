@@ -2,246 +2,293 @@
 # Module 05 Validate — Dynamic Inventories
 #
 # Checks:
-#   1. /home/<ssh_username>/dyninv.sh exists on bastion and is executable (mode 0755)
-#   2. dyninv.sh --list returns valid JSON with keys: dyngroup, all, _meta
-#      and contains the expected host entries in dyngroup and all
-#   3. Gitea raw URL for inventory_list returns HTTP 200
-#   4. AAP inventory "Cloud inventory" exists in org Default
-#   5. AAP inventory source "Cloud inventory Script" exists (type=scm, update_on_launch=true, cache=300)
-#   6. Inventory sync completed successfully (status=successful, async — may need retry)
-#   7. "Cloud inventory" has at least 7 hosts
+#   Task 1: /home/<bastion_user>/dyninv.sh exists on bastion, mode 0755
+#   Task 2: dyninv.sh --list returns valid JSON with keys dyngroup, all, _meta
+#           and contains all 7 expected cloud hosts
+#   Task 3: Gitea raw URL for inventory_list returns HTTP 200
+#   Task 4: AAP inventory "Cloud inventory" exists in org Default
+#   Task 5: AAP inventory source "Cloud inventory Script" exists
+#           (source=scm, update_on_launch=true, update_cache_timeout=300)
+#   Task 6: At least one inventory sync for "Cloud inventory Script" has status=successful
+#   Task 7: "Cloud inventory" has at least 7 hosts
+#
+# Variable map (from user_data.yml via runner jobs.py):
+#   bastion_host, bastion_port, bastion_user, bastion_password
+#   controller_url, controller_username, controller_password
+#
+# API base: /api/controller/v2/  (AAP 2.5 — NOT /api/v2/)
+# validation_check: bare module name (no FQCN — collection not installed in runner)
 
-# ── Play 0: Add bastion to in-memory inventory ─────────────────────────────
-
-- name: Module 05 Validate — add bastion to in-memory inventory
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 0 — Add bastion to in-memory inventory
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 05 Validate — build bastion inventory
   hosts: localhost
-  connection: local
   gather_facts: false
   tasks:
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
-        ansible_user: "{{ ssh_username | default('lab-user') }}"
-        ansible_ssh_private_key_file: /app/.ssh/id_rsa
-        ansible_ssh_common_args: "-F /app/.ssh/config"
+        groups: bastion
+        ansible_host: "{{ bastion_host }}"
+        ansible_port: "{{ bastion_port | default(22) }}"
+        ansible_user: "{{ bastion_user | default('lab-user') }}"
+        ansible_password: "{{ bastion_password | default('') }}"
+        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: bastion_host | default('') | length > 0
 
-# ── Play 1: Bastion file checks ─────────────────────────────────────────────
-
-- name: Module 05 Validate — bastion file and script checks
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 1 — Bastion file and script checks (Tasks 1, 2, 3)
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 05 Validate — bastion checks
   hosts: bastion
   gather_facts: false
   vars:
-    ssh_user: "{{ ssh_username | default('lab-user') }}"
-    script_path: "/home/{{ ssh_username | default('lab-user') }}/dyninv.sh"
-    gitea_project: "{{ gitea_controller_project | default('playbooks-adv-controller') }}"
-    inventory_url: "{{ gitea_url | default('') }}/{{ gitea_username | default('') }}/{{ gitea_controller_project | default('playbooks-adv-controller') }}/raw/branch/main/constructed-inventory/inventory_list"
+    _script_path: "/home/{{ bastion_user | default('lab-user') }}/dyninv.sh"
+    _check_script: "/tmp/dyninv_check.py"
+    _gitea_url: >-
+      {{
+        controller_url | default('')
+        | regex_replace('https://controller-', 'https://gitea-')
+        | regex_replace('/+$', '')
+      }}
+    _gitea_user: "{{ bastion_user | default('lab-user') }}"
+    _gitea_repo: "playbooks-adv-controller"
+    _inventory_list_url: >-
+      {{ _gitea_url }}/{{ _gitea_user }}/{{ _gitea_repo }}/raw/branch/main/constructed-inventory/inventory_list
+
   tasks:
 
-    # -------------------------------------------------------
-    # Check 1 — dyninv.sh exists and is executable (mode 0755)
-    # -------------------------------------------------------
-    - name: Check dyninv.sh file exists and is executable
+    # ── Task 1 ── dyninv.sh exists and is executable (mode 0755) ─────────────
+    - name: Stat dyninv.sh on bastion
       ansible.builtin.command:
-        cmd: "sh -c 'test -x {{ script_path }} && stat -c %a {{ script_path }}'"
-      register: r_file_stat
+        cmd: "sh -c 'test -x {{ _script_path }} && stat -c %a {{ _script_path }}'"
+      register: r_stat
       changed_when: false
       ignore_errors: true
 
-    - name: Set dyninv.sh exists fact
+    - name: Set task-1 fact
       ansible.builtin.set_fact:
-        _task1_ok: "{{ r_file_stat.rc | default(1) == 0 and '755' in (r_file_stat.stdout | default('')) }}"
+        _task1_ok: "{{ r_stat.rc | default(1) | int == 0 and '755' in (r_stat.stdout | default('')) }}"
 
-    # -------------------------------------------------------
-    # Check 2 — dyninv.sh --list returns valid JSON with expected keys and hosts
-    # -------------------------------------------------------
-    - name: Run dyninv.sh --list and parse JSON output
-      ansible.builtin.command:
-        cmd: >
-          sh -c '{{ script_path }} --list | python3 -c "
+    - name: Debug task-1
+      ansible.builtin.debug:
+        msg: "Task 1 — dyninv.sh exists and mode 0755: {{ _task1_ok }}"
+
+    # ── Task 2 ── dyninv.sh --list returns valid JSON with all expected hosts ─
+    # Write a helper Python script to /tmp to avoid shell quoting issues with
+    # multi-line python3 -c strings. The script is written then piped into.
+    - name: Write dyninv JSON check helper script to bastion
+      ansible.builtin.copy:
+        dest: "{{ _check_script }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
           import json, sys
-          data = json.load(sys.stdin)
-          keys_ok = all(k in data for k in [\"dyngroup\", \"all\", \"_meta\"])
-          dyngroup_hosts = data.get(\"dyngroup\", {}).get(\"hosts\", [])
-          all_hosts = data.get(\"all\", {}).get(\"hosts\", [])
-          expected_dyn = {\"cloud1.cloud.example.com\", \"cloud2.cloud.example.com\", \"CLOUD3.cloud.example.com\"}
-          expected_all = {\"cloud4.prod.cloud.example.com\", \"cloud5.prod.cloud.example.com\", \"cloud6.dev.cloud.example.com\", \"cloud7.dev.cloud.example.com\"}
+          d = json.load(sys.stdin)
+          keys_ok = all(k in d for k in ['dyngroup', 'all', '_meta'])
+          dyngroup_hosts = d.get('dyngroup', {}).get('hosts', [])
+          all_hosts = d.get('all', {}).get('hosts', [])
+          expected_dyn = {'cloud1.cloud.example.com', 'cloud2.cloud.example.com', 'CLOUD3.cloud.example.com'}
+          expected_all = {'cloud4.prod.cloud.example.com', 'cloud5.prod.cloud.example.com',
+                          'cloud6.dev.cloud.example.com', 'cloud7.dev.cloud.example.com'}
           dyn_ok = expected_dyn.issubset(set(dyngroup_hosts))
           all_ok = expected_all.issubset(set(all_hosts))
-          print(\"KEYS:\" + str(keys_ok) + \" DYN:\" + str(dyn_ok) + \" ALL:\" + str(all_ok))
-          "'
-      register: r_script_json
+          print('KEYS:' + str(keys_ok) + ' DYN:' + str(dyn_ok) + ' ALL:' + str(all_ok))
+      when: _task1_ok | bool
+
+    - name: Run dyninv.sh --list and parse JSON via helper script
+      ansible.builtin.shell:
+        cmd: "{{ _script_path }} --list | python3 {{ _check_script }}"
+      register: r_json
       changed_when: false
       ignore_errors: true
-      when: _task1_ok | default(false)
+      when: _task1_ok | bool
 
-    - name: Set dyninv.sh JSON output fact
+    - name: Set task-2 fact
       ansible.builtin.set_fact:
         _task2_ok: >-
           {{
-            r_script_json is defined
-            and r_script_json is not skipped
-            and r_script_json.rc | default(1) == 0
-            and 'KEYS:True' in (r_script_json.stdout | default(''))
-            and 'DYN:True' in (r_script_json.stdout | default(''))
-            and 'ALL:True' in (r_script_json.stdout | default(''))
+            r_json is defined
+            and r_json is not skipped
+            and r_json.rc | default(1) | int == 0
+            and 'KEYS:True' in (r_json.stdout | default(''))
+            and 'DYN:True'  in (r_json.stdout | default(''))
+            and 'ALL:True'  in (r_json.stdout | default(''))
           }}
 
-    # -------------------------------------------------------
-    # Check 3 — Gitea raw URL for inventory_list returns HTTP 200
-    # -------------------------------------------------------
-    - name: Check Gitea inventory_list URL returns HTTP 200
+    - name: Default task-2 when script was not run
+      ansible.builtin.set_fact:
+        _task2_ok: false
+      when: not (_task1_ok | bool)
+
+    - name: Debug task-2
+      ansible.builtin.debug:
+        msg: "Task 2 — dyninv.sh --list valid JSON + all hosts: {{ _task2_ok }} (output: {{ r_json.stdout | default('skipped') }})"
+
+    # ── Task 3 ── Gitea inventory_list URL returns HTTP 200 ───────────────────
+    - name: Check Gitea inventory_list URL
       ansible.builtin.command:
-        cmd: "sh -c 'curl -s -o /dev/null -w \"%{http_code}\" {{ inventory_url }}'"
-      register: r_gitea_url
+        cmd: "sh -c 'curl -s -o /dev/null -w \"%{http_code}\" {{ _inventory_list_url }}'"
+      register: r_gitea
       changed_when: false
       ignore_errors: true
 
-    - name: Set Gitea URL check fact
+    - name: Set task-3 fact
       ansible.builtin.set_fact:
-        _task3_ok: "{{ '200' in (r_gitea_url.stdout | default('')) }}"
+        _task3_ok: "{{ '200' in (r_gitea.stdout | default('')) }}"
 
-    # -------------------------------------------------------
-    # Persist facts to hostvars so Play 2 (localhost) can read them
-    # -------------------------------------------------------
-    - name: Persist bastion check results as dummy file for cross-play access
+    - name: Debug task-3
+      ansible.builtin.debug:
+        msg: "Task 3 — Gitea inventory_list HTTP 200: {{ _task3_ok }} (got {{ r_gitea.stdout | default('no response') }})"
+
+    # ── Persist facts so Play 2 (localhost) can read them ─────────────────────
+    - name: Persist bastion check results to hostvars
       ansible.builtin.set_fact:
-        bastion_task1_ok: "{{ _task1_ok | default(false) }}"
-        bastion_task2_ok: "{{ _task2_ok | default(false) }}"
-        bastion_task3_ok: "{{ _task3_ok | default(false) }}"
+        bastion_task1_ok: "{{ _task1_ok | bool }}"
+        bastion_task2_ok: "{{ _task2_ok | bool }}"
+        bastion_task3_ok: "{{ _task3_ok | bool }}"
 
-# ── Play 2: AAP API checks and final validation_check ───────────────────────
-
-- name: Module 05 Validate — AAP API checks and final result
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 2 — AAP API checks (Tasks 4–7) and final validation_check
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 05 Validate — AAP checks and final result
   hosts: localhost
-  connection: local
   gather_facts: false
   vars:
-    aap_host: "{{ controller_url | default('') }}"
-    aap_user: "{{ controller_username | default('admin') }}"
-    aap_pass: "{{ controller_password | default('') }}"
-    inventory_name: "Cloud inventory"
-    inventory_source_name: "Cloud inventory Script"
+    _api: "{{ controller_url | default('') }}/api/controller/v2"
+    _aap_user: "{{ controller_username | default('lab-user') }}"
+    _aap_pass: "{{ controller_password | default('') }}"
 
   tasks:
 
-    # Pull bastion facts from hostvars
-    - name: Pull bastion check results into localhost facts
+    # Pull bastion facts via hostvars
+    - name: Pull bastion facts into localhost
       ansible.builtin.set_fact:
-        _task1_ok: "{{ hostvars['bastion']['bastion_task1_ok'] | default(false) }}"
-        _task2_ok: "{{ hostvars['bastion']['bastion_task2_ok'] | default(false) }}"
-        _task3_ok: "{{ hostvars['bastion']['bastion_task3_ok'] | default(false) }}"
+        _task1_ok: "{{ hostvars['bastion']['bastion_task1_ok'] | default(false) | bool }}"
+        _task2_ok: "{{ hostvars['bastion']['bastion_task2_ok'] | default(false) | bool }}"
+        _task3_ok: "{{ hostvars['bastion']['bastion_task3_ok'] | default(false) | bool }}"
 
-    # -------------------------------------------------------
-    # Check 4 — AAP inventory "Cloud inventory" exists in org Default
-    # -------------------------------------------------------
+    # ── Task 4 ── "Cloud inventory" exists in AAP org Default ─────────────────
     - name: Query AAP for "Cloud inventory"
       ansible.builtin.uri:
-        url: "{{ aap_host }}/api/v2/inventories/?name=Cloud+inventory&organization__name=Default"
+        url: "{{ _api }}/inventories/?name=Cloud+inventory&organization__name=Default"
         method: GET
-        url_username: "{{ aap_user }}"
-        url_password: "{{ aap_pass }}"
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         status_code: [200]
         return_content: true
-      register: r_inventory
+      register: r_inv
       ignore_errors: true
 
-    - name: Set inventory exists fact and capture ID
+    - name: Set task-4 fact and inventory ID
       ansible.builtin.set_fact:
-        _task4_ok: "{{ (r_inventory.json.count | default(0)) > 0 }}"
-        _inventory_id: "{{ (r_inventory.json.results | default([]) | map(attribute='id') | list | first) | default('') }}"
+        _task4_ok: "{{ (r_inv.json.count | default(0)) | int > 0 }}"
+        _inv_id: "{{ (r_inv.json.results | default([]) | map(attribute='id') | list | first) | default('') }}"
 
-    # -------------------------------------------------------
-    # Check 5 — AAP inventory source "Cloud inventory Script" exists
-    #            type=scm, update_on_launch=true, cache=300
-    # -------------------------------------------------------
+    - name: Debug task-4
+      ansible.builtin.debug:
+        msg: "Task 4 — Cloud inventory exists (ID={{ _inv_id }}): {{ _task4_ok }}"
+
+    # ── Task 5 ── "Cloud inventory Script" source: scm, update_on_launch, cache=300
     - name: Query AAP for "Cloud inventory Script" source
       ansible.builtin.uri:
-        url: "{{ aap_host }}/api/v2/inventory_sources/?name=Cloud+inventory+Script&inventory={{ _inventory_id }}"
+        url: "{{ _api }}/inventory_sources/?name=Cloud+inventory+Script&inventory={{ _inv_id }}"
         method: GET
-        url_username: "{{ aap_user }}"
-        url_password: "{{ aap_pass }}"
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         status_code: [200]
         return_content: true
-      register: r_source
+      register: r_src
       ignore_errors: true
-      when: _task4_ok | default(false) and _inventory_id | string | length > 0
+      when: _task4_ok | bool and _inv_id | string | length > 0
 
-    - name: Set inventory source facts
+    - name: Set task-5 fact and source ID
       ansible.builtin.set_fact:
         _task5_ok: >-
           {{
-            r_source is not skipped
-            and (r_source.json.count | default(0)) > 0
-            and (r_source.json.results | default([]) | selectattr('source', 'equalto', 'scm') | list | length) > 0
-            and (r_source.json.results | default([]) | selectattr('update_on_launch', 'equalto', true) | list | length) > 0
-            and (r_source.json.results | default([]) | map(attribute='update_cache_timeout') | list | first | default(0)) | int == 300
+            r_src is not skipped
+            and (r_src.json.count | default(0)) | int > 0
+            and (r_src.json.results | default([])
+                  | selectattr('source', 'equalto', 'scm') | list | length) > 0
+            and (r_src.json.results | default([])
+                  | selectattr('update_on_launch', 'equalto', true) | list | length) > 0
+            and (r_src.json.results | default([])
+                  | map(attribute='update_cache_timeout') | list | first | default(0)) | int == 300
           }}
-        _source_id: "{{ (r_source.json.results | default([]) | map(attribute='id') | list | first) | default('') }}"
-      when: r_source is defined and r_source is not skipped
+        _src_id: "{{ (r_src.json.results | default([]) | map(attribute='id') | list | first) | default('') }}"
+      when: r_src is defined and r_src is not skipped
 
-    - name: Default source facts when skipped
+    - name: Default task-5 facts when skipped
       ansible.builtin.set_fact:
         _task5_ok: false
-        _source_id: ''
-      when: r_source is not defined or r_source is skipped
+        _src_id: ''
+      when: r_src is not defined or r_src is skipped
 
-    # -------------------------------------------------------
-    # Check 6 — Inventory sync completed successfully (async — may need retry)
-    # Query inventory sync jobs for "Cloud inventory Script" — look for any successful one
-    # -------------------------------------------------------
-    - name: Query AAP for inventory sync jobs on "Cloud inventory Script"
+    - name: Debug task-5
+      ansible.builtin.debug:
+        msg: "Task 5 — Cloud inventory Script source (scm, update_on_launch, cache=300): {{ _task5_ok }} (ID={{ _src_id }})"
+
+    # ── Task 6 ── At least one sync for "Cloud inventory Script" is successful ─
+    - name: Query AAP for inventory update jobs on "Cloud inventory Script"
       ansible.builtin.uri:
-        url: "{{ aap_host }}/api/v2/inventory_updates/?inventory_source={{ _source_id }}&order_by=-finished&page_size=10"
+        url: "{{ _api }}/inventory_updates/?inventory_source={{ _src_id }}&order_by=-finished&page_size=10"
         method: GET
-        url_username: "{{ aap_user }}"
-        url_password: "{{ aap_pass }}"
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         status_code: [200]
         return_content: true
-      register: r_sync_jobs
+      register: r_syncs
       ignore_errors: true
-      when: _source_id | string | length > 0
+      when: _src_id | string | length > 0
 
-    - name: Set sync completed fact
+    - name: Set task-6 facts
       ansible.builtin.set_fact:
         _task6_ok: >-
           {{
-            r_sync_jobs is defined
-            and r_sync_jobs is not skipped
-            and (r_sync_jobs.json.results | default([]) | selectattr('status', 'equalto', 'successful') | list | length) > 0
+            r_syncs is defined
+            and r_syncs is not skipped
+            and (r_syncs.json.results | default([])
+                  | selectattr('status', 'equalto', 'successful') | list | length) > 0
           }}
-        _sync_still_running: >-
+        _sync_running: >-
           {{
-            r_sync_jobs is defined
-            and r_sync_jobs is not skipped
-            and (r_sync_jobs.json.results | default([]) | selectattr('status', 'in', ['pending', 'waiting', 'running']) | list | length) > 0
-            and (r_sync_jobs.json.results | default([]) | selectattr('status', 'equalto', 'successful') | list | length) == 0
+            r_syncs is defined
+            and r_syncs is not skipped
+            and (r_syncs.json.results | default([])
+                  | selectattr('status', 'in', ['pending', 'waiting', 'running']) | list | length) > 0
+            and (r_syncs.json.results | default([])
+                  | selectattr('status', 'equalto', 'successful') | list | length) == 0
           }}
-      when: r_sync_jobs is defined and r_sync_jobs is not skipped
+      when: r_syncs is defined and r_syncs is not skipped
 
-    - name: Default sync facts when skipped
+    - name: Default task-6 facts when skipped
       ansible.builtin.set_fact:
         _task6_ok: false
-        _sync_still_running: false
-      when: r_sync_jobs is not defined or r_sync_jobs is skipped
+        _sync_running: false
+      when: r_syncs is not defined or r_syncs is skipped
 
-    # -------------------------------------------------------
-    # Check 7 — "Cloud inventory" has at least 7 hosts
-    # -------------------------------------------------------
+    - name: Debug task-6
+      ansible.builtin.debug:
+        msg: "Task 6 — Inventory sync successful: {{ _task6_ok }} (still running: {{ _sync_running }})"
+
+    # ── Task 7 ── "Cloud inventory" has at least 7 hosts ─────────────────────
     - name: Query AAP for host count in "Cloud inventory"
       ansible.builtin.uri:
-        url: "{{ aap_host }}/api/v2/hosts/?inventory={{ _inventory_id }}&page_size=1"
+        url: "{{ _api }}/hosts/?inventory={{ _inv_id }}&page_size=1"
         method: GET
-        url_username: "{{ aap_user }}"
-        url_password: "{{ aap_pass }}"
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -249,52 +296,54 @@
         return_content: true
       register: r_hosts
       ignore_errors: true
-      when: _task4_ok | default(false) and _inventory_id | string | length > 0
+      when: _task4_ok | bool and _inv_id | string | length > 0
 
-    - name: Set host count fact
+    - name: Set task-7 fact
       ansible.builtin.set_fact:
-        _task7_ok: "{{ (r_hosts.json.count | default(0)) >= 7 }}"
+        _task7_ok: "{{ (r_hosts.json.count | default(0)) | int >= 7 }}"
         _host_count: "{{ r_hosts.json.count | default(0) }}"
       when: r_hosts is defined and r_hosts is not skipped
 
-    - name: Default host count fact when skipped
+    - name: Default task-7 facts when skipped
       ansible.builtin.set_fact:
         _task7_ok: false
         _host_count: 0
       when: r_hosts is not defined or r_hosts is skipped
 
-    # -------------------------------------------------------
-    # Build results and call validation_check
-    # -------------------------------------------------------
-    - name: Build final pass/fail condition
+    - name: Debug task-7
+      ansible.builtin.debug:
+        msg: "Task 7 — Cloud inventory hosts: {{ _host_count }} (need >= 7): {{ _task7_ok }}"
+
+    # ── Final combined pass/fail ───────────────────────────────────────────────
+    - name: Build overall pass/fail flag
       ansible.builtin.set_fact:
         _all_ok: >-
           {{
-            (_task1_ok | default(false)) | bool
-            and (_task2_ok | default(false)) | bool
-            and (_task3_ok | default(false)) | bool
-            and (_task4_ok | default(false)) | bool
-            and (_task5_ok | default(false)) | bool
-            and (_task6_ok | default(false)) | bool
-            and (_task7_ok | default(false)) | bool
+            (_task1_ok | bool)
+            and (_task2_ok | bool)
+            and (_task3_ok | bool)
+            and (_task4_ok | bool)
+            and (_task5_ok | bool)
+            and (_task6_ok | bool)
+            and (_task7_ok | bool)
           }}
 
-    - name: Validate all tasks
-      rhpds.ftl.validation_check:
+    - name: Validate module 05 — dynamic inventories
+      validation_check:
         check: "{{ _all_ok }}"
         pass_msg: |
-          Task 1: dyninv.sh exists at /home/{{ ssh_username | default('lab-user') }}/dyninv.sh and is executable (mode 0755)
-          Task 2: dyninv.sh --list returns valid JSON with dyngroup, all, _meta keys and all expected hosts
+          Task 1: dyninv.sh exists at /home/{{ bastion_user | default('lab-user') }}/dyninv.sh and is executable (mode 0755)
+          Task 2: dyninv.sh --list returns valid JSON with dyngroup, all, _meta keys and all 7 expected hosts
           Task 3: Gitea inventory_list URL is reachable (HTTP 200)
           Task 4: AAP inventory "Cloud inventory" exists in org Default
           Task 5: AAP inventory source "Cloud inventory Script" exists (scm, update_on_launch=true, cache=300)
-          Task 6: Inventory sync completed successfully
+          Task 6: At least one inventory sync completed successfully
           Task 7: "Cloud inventory" has {{ _host_count }} hosts (>= 7 required)
         error_msg: |
-          {{ 'Task 1: dyninv.sh exists and is executable (0755)' if (_task1_ok | default(false)) else 'Task 1: FAILED — /home/' + (ssh_username | default('lab-user')) + '/dyninv.sh is missing or not executable. Run Solve or create the file manually and chmod +x it.' }}
-          {{ 'Task 2: dyninv.sh --list returns correct JSON with all expected hosts' if (_task2_ok | default(false)) else 'Task 2: FAILED — dyninv.sh --list output is missing required keys or hosts. Check that the Gitea URL in the script is correct and run dyninv.sh --list manually to verify.' }}
-          {{ 'Task 3: Gitea inventory_list URL is reachable (HTTP 200)' if (_task3_ok | default(false)) else 'Task 3: FAILED — Gitea raw URL for inventory_list returned non-200. Check that the Lab Project Repo is accessible and the branch/path is correct.' }}
-          {{ 'Task 4: "Cloud inventory" exists in AAP org Default' if (_task4_ok | default(false)) else 'Task 4: FAILED — "Cloud inventory" not found in AAP. Create it under Automation Execution > Infrastructure > Inventories.' }}
-          {{ 'Task 5: "Cloud inventory Script" source exists (scm, update_on_launch=true, cache=300)' if (_task5_ok | default(false)) else 'Task 5: FAILED — "Cloud inventory Script" source is missing or misconfigured. Verify Source=Project, Project=Lab Project Repo, path=constructed-inventory/inventory-script, Update on launch=true, Cache=300.' }}
-          {{ 'Task 6: Inventory sync completed successfully' if (_task6_ok | default(false)) else ('Task 6: Sync still in progress — click Validate again in a few minutes.' if (_sync_still_running | default(false)) else 'Task 6: FAILED — No successful inventory sync found. Trigger a sync from the Sources tab of "Cloud inventory" and wait for it to complete.') }}
-          {{ 'Task 7: "Cloud inventory" has ' + (_host_count | string) + ' hosts (>= 7 required)' if (_task7_ok | default(false)) else 'Task 7: FAILED — "Cloud inventory" has only ' + (_host_count | string) + ' hosts (need >= 7). Ensure the sync completed and the Gitea inventory_list contains all 7 expected hosts.' }}
+          {{ 'Task 1: dyninv.sh exists and is executable (0755)' if (_task1_ok | bool) else 'Task 1: FAILED — /home/' + (bastion_user | default('lab-user')) + '/dyninv.sh is missing or not executable. Run Solve or create the file manually (chmod 755).' }}
+          {{ 'Task 2: dyninv.sh --list returns correct JSON with all 7 expected hosts' if (_task2_ok | bool) else 'Task 2: FAILED — dyninv.sh --list output missing required keys or hosts. Verify the Gitea URL inside the script and run it manually: ./dyninv.sh --list | python3 -m json.tool' }}
+          {{ 'Task 3: Gitea inventory_list URL returns HTTP 200' if (_task3_ok | bool) else 'Task 3: FAILED — Gitea raw URL for inventory_list returned non-200. Confirm the Lab Project Repo is accessible and the branch/path is correct.' }}
+          {{ 'Task 4: "Cloud inventory" exists in AAP org Default' if (_task4_ok | bool) else 'Task 4: FAILED — "Cloud inventory" not found. Create it under Automation Execution > Infrastructure > Inventories.' }}
+          {{ 'Task 5: "Cloud inventory Script" source exists (scm, update_on_launch=true, cache=300)' if (_task5_ok | bool) else 'Task 5: FAILED — Source missing or misconfigured. Set Source=Project, Project=Lab Project Repo, Path=constructed-inventory/inventory-script, Update on launch=true, Cache=300.' }}
+          {{ 'Task 6: Inventory sync completed successfully' if (_task6_ok | bool) else ('Task 6: Sync still in progress — click Validate again in a minute.' if (_sync_running | bool) else 'Task 6: FAILED — No successful sync found. Trigger a sync from the Sources tab of Cloud inventory and wait for it to complete.') }}
+          {{ 'Task 7: "Cloud inventory" has ' + (_host_count | string) + ' hosts (>= 7)' if (_task7_ok | bool) else 'Task 7: FAILED — Only ' + (_host_count | string) + ' hosts found (need >= 7). Ensure the sync completed and inventory_list in Gitea contains all 7 cloud hosts.' }}

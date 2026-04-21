@@ -1,143 +1,355 @@
 ---
 # Module 05 Solve — Dynamic Inventories
-# Automates:
-#   1. Write dyninv.sh to bastion
-#   2. Make it executable
-#   3. Create "Cloud inventory" in AAP
-#   4. Add "Cloud inventory Script" source (scm, update_on_launch=true, cache=300)
-#   5. Trigger inventory sync
+#
+# What the student does:
+#   1. Write dyninv.sh to bastion (curls Gitea inventory_list on --list)
+#   2. chmod +x dyninv.sh
+#   3. Create "Cloud inventory" in AAP org Default
+#   4. Create "Cloud inventory Script" source (scm, update_on_launch=true, cache=300)
+#   5. Trigger a sync and wait for it to succeed
+#
+# Implementation notes:
+#   - bastion_host / bastion_port / bastion_user / bastion_password come from user_data.yml
+#   - controller_url / controller_username / controller_password come from user_data.yml
+#   - All AAP REST calls use ansible.builtin.uri delegate_to: localhost
+#     (runner container reaches controller HTTPS; no awx.awx collection)
+#   - API base: /api/controller/v2/  (AAP 2.5 unified gateway — NOT /api/v2/)
+#   - gitea_url is derived from controller_url (replace "controller-" with "gitea-")
+#   - Lab Project Repo is the SCM project that owns constructed-inventory/inventory-script
 
-- name: Module 05 Solve — add bastion to inventory
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 0 — Add bastion to in-memory inventory
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 05 Solve — build bastion inventory
   hosts: localhost
-  connection: local
   gather_facts: false
   tasks:
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
-        ansible_user: "{{ ssh_username | default('lab-user') }}"
-        ansible_ssh_private_key_file: /app/.ssh/id_rsa
-        ansible_ssh_common_args: "-F /app/.ssh/config"
+        groups: bastion
+        ansible_host: "{{ bastion_host }}"
+        ansible_port: "{{ bastion_port | default(22) }}"
+        ansible_user: "{{ bastion_user | default('lab-user') }}"
+        ansible_password: "{{ bastion_password | default('') }}"
+        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: bastion_host | default('') | length > 0
 
-# ─── Play 1: Write dyninv.sh ───────────────────────────────────────────────
-
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 1 — Write dyninv.sh to bastion
+# ─────────────────────────────────────────────────────────────────────────────
 - name: Module 05 Solve — write dyninv.sh to bastion
   hosts: bastion
   gather_facts: false
   vars:
-    ssh_user: "{{ ssh_username | default('lab-user') }}"
-    script_path: "/home/{{ ssh_username | default('lab-user') }}/dyninv.sh"
+    _ssh_user: "{{ bastion_user | default('lab-user') }}"
+    _script_path: "/home/{{ bastion_user | default('lab-user') }}/dyninv.sh"
+    # Derive gitea_url from controller_url: replace "controller-" prefix with "gitea-"
+    _gitea_url: >-
+      {{
+        controller_url | default('')
+        | regex_replace('https://controller-', 'https://gitea-')
+        | regex_replace('/+$', '')
+      }}
+    _gitea_user: "{{ bastion_user | default('lab-user') }}"
+    _gitea_repo: "playbooks-adv-controller"
+    _inventory_list_url: >-
+      {{ _gitea_url }}/{{ _gitea_user }}/{{ _gitea_repo }}/raw/branch/main/constructed-inventory/inventory_list
+
   tasks:
-    - name: Write dynamic inventory script
+
+    # ── Task 1 ── Write the dynamic inventory script ──────────────────────────
+    - name: Write dyninv.sh to bastion home directory
       ansible.builtin.copy:
-        dest: "{{ script_path }}"
+        dest: "{{ _script_path }}"
         mode: "0755"
         content: |
           #!/bin/bash
 
           if [ "$1" == "--list" ] ; then
-              curl -sS {{ gitea_url }}/{{ gitea_username }}/{{ gitea_controller_project | default('playbooks-adv-controller') }}/raw/branch/main/constructed-inventory/inventory_list
+              curl -sS {{ _inventory_list_url }}
           elif [ "$1" == "--host" ]; then
               echo '{"_meta": {"hostvars": {}}}'
           else
               echo "{ }"
           fi
 
-    - name: Verify dyninv.sh returns valid JSON
+    # ── Task 2 ── Smoke-test: verify --list returns parseable JSON ────────────
+    - name: Run dyninv.sh --list and verify JSON output
       ansible.builtin.command:
-        cmd: "{{ script_path }} --list"
+        cmd: "{{ _script_path }} --list"
       register: r_dyninv
       changed_when: false
       ignore_errors: true
 
-    - name: Show dyninv.sh output (first 200 chars)
+    - name: Show dyninv.sh --list result (first 300 chars)
       ansible.builtin.debug:
-        msg: "dyninv.sh --list output: {{ r_dyninv.stdout[:200] | default('(empty)') }}"
+        msg: "dyninv.sh --list: {{ r_dyninv.stdout[:300] | default('(empty)') }}"
 
-# ─── Play 2: Create AAP inventory and source via awx.awx collection ───────
-
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 2 — Create AAP Cloud inventory and inventory source, trigger sync
+# All API calls delegate_to: localhost (runner container reaches controller HTTPS)
+# ─────────────────────────────────────────────────────────────────────────────
 - name: Module 05 Solve — configure AAP Cloud inventory
-  hosts: localhost
-  connection: local
+  hosts: bastion
   gather_facts: false
   vars:
-    aap_host: "{{ controller_url | default('') | regex_replace('^https?://', '') }}"
-    aap_username: "{{ controller_username | default('admin') }}"
-    aap_password: "{{ controller_password | default('') }}"
-    inventory_name: "Cloud inventory"
-    inventory_source_name: "Cloud inventory Script"
+    _api: "{{ controller_url | default('') }}/api/controller/v2"
+    _aap_user: "{{ controller_username | default('lab-user') }}"
+    _aap_pass: "{{ controller_password | default('') }}"
+    _inv_name: "Cloud inventory"
+    _src_name: "Cloud inventory Script"
+    _project_name: "Lab Project Repo"
+
   tasks:
-    - name: Create "Cloud inventory" in AAP
-      awx.awx.inventory:
-        name: "{{ inventory_name }}"
-        organization: "Default"
-        state: present
-        controller_host: "{{ aap_host }}"
-        controller_username: "{{ aap_username }}"
-        controller_password: "{{ aap_password }}"
+
+    # ── Task 3 ── Resolve "Lab Project Repo" project ID ──────────────────────
+    - name: Look up "Lab Project Repo" in AAP
+      ansible.builtin.uri:
+        url: "{{ _api }}/projects/?name=Lab+Project+Repo"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
         validate_certs: false
-      register: r_inventory
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_project
       ignore_errors: true
+      delegate_to: localhost
 
-    - name: Debug inventory creation result
+    - name: Set project ID fact
+      ansible.builtin.set_fact:
+        _project_id: "{{ (r_project.json.results | default([]) | map(attribute='id') | list | first) | default('') }}"
+        _project_ok: "{{ (r_project.json.count | default(0)) | int > 0 }}"
+
+    - name: Warn if Lab Project Repo not found
       ansible.builtin.debug:
-        msg: "Inventory creation: {{ r_inventory.changed | default('unknown') }} — {{ r_inventory.msg | default('ok') }}"
-      ignore_errors: true
+        msg: "WARNING: Lab Project Repo not found in AAP — inventory source creation will be skipped."
+      when: not (_project_ok | bool)
 
-    - name: Create "Cloud inventory Script" source
-      awx.awx.inventory_source:
-        name: "{{ inventory_source_name }}"
-        inventory: "{{ inventory_name }}"
-        source: scm
-        source_project: "Lab Project Repo"
-        source_path: "constructed-inventory/inventory-script"
-        update_on_launch: true
-        update_cache_timeout: 300
-        overwrite: true
-        overwrite_vars: true
-        organization: "Default"
-        state: present
-        controller_host: "{{ aap_host }}"
-        controller_username: "{{ aap_username }}"
-        controller_password: "{{ aap_password }}"
+    # ── Task 4 ── Create "Cloud inventory" ───────────────────────────────────
+    - name: Check if "Cloud inventory" already exists
+      ansible.builtin.uri:
+        url: "{{ _api }}/inventories/?name=Cloud+inventory&organization__name=Default"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
         validate_certs: false
-      register: r_source
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_inv_check
       ignore_errors: true
+      delegate_to: localhost
 
-    - name: Debug inventory source creation result
-      ansible.builtin.debug:
-        msg: "Source creation: {{ r_source.changed | default('unknown') }}"
-      ignore_errors: true
+    - name: Set inventory pre-existing fact and ID
+      ansible.builtin.set_fact:
+        _inv_exists: "{{ (r_inv_check.json.count | default(0)) | int > 0 }}"
+        _inv_id: "{{ (r_inv_check.json.results | default([]) | map(attribute='id') | list | first) | default('') }}"
 
-    - name: Trigger inventory sync
-      awx.awx.inventory_source_update:
-        name: "{{ inventory_source_name }}"
-        inventory: "{{ inventory_name }}"
-        organization: "Default"
-        wait: false
-        controller_host: "{{ aap_host }}"
-        controller_username: "{{ aap_username }}"
-        controller_password: "{{ aap_password }}"
+    - name: Look up Default organization ID
+      ansible.builtin.uri:
+        url: "{{ _api }}/organizations/?name=Default"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
         validate_certs: false
-      register: r_sync
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_org
       ignore_errors: true
+      delegate_to: localhost
+      when: not (_inv_exists | bool)
 
-    - name: Debug sync trigger result
+    - name: Create "Cloud inventory" in AAP org Default
+      ansible.builtin.uri:
+        url: "{{ _api }}/inventories/"
+        method: POST
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [201]
+        body_format: json
+        body:
+          name: "Cloud inventory"
+          organization: "{{ (r_org.json.results | default([]) | map(attribute='id') | list | first) | int }}"
+          description: "Dynamic cloud inventory from Gitea script"
+        return_content: true
+      register: r_inv_create
+      ignore_errors: true
+      delegate_to: localhost
+      when: not (_inv_exists | bool)
+
+    - name: Set inventory ID from creation result
+      ansible.builtin.set_fact:
+        _inv_id: "{{ r_inv_create.json.id | default(_inv_id) }}"
+      when: r_inv_create is not skipped and (r_inv_create.json.id | default('')) | string | length > 0
+
+    - name: Report inventory status
       ansible.builtin.debug:
-        msg: "Sync triggered: {{ r_sync.status | default('unknown') }}"
+        msg: "Cloud inventory ID: {{ _inv_id }} ({{ 'pre-existing' if _inv_exists else 'created' }})"
+
+    # ── Task 5 ── Create "Cloud inventory Script" source ─────────────────────
+    - name: Check if "Cloud inventory Script" source already exists
+      ansible.builtin.uri:
+        url: "{{ _api }}/inventory_sources/?name=Cloud+inventory+Script&inventory={{ _inv_id }}"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_src_check
       ignore_errors: true
+      delegate_to: localhost
+      when: _inv_id | string | length > 0
 
-# ─── Play 3: Report ────────────────────────────────────────────────────────
+    - name: Set source pre-existing fact and ID
+      ansible.builtin.set_fact:
+        _src_exists: "{{ (r_src_check.json.count | default(0)) | int > 0 }}"
+        _src_id: "{{ (r_src_check.json.results | default([]) | map(attribute='id') | list | first) | default('') }}"
+      when: r_src_check is not skipped
 
-- name: Module 05 Solve — report
+    - name: Default source facts when skipped
+      ansible.builtin.set_fact:
+        _src_exists: false
+        _src_id: ''
+      when: r_src_check is skipped or r_src_check is not defined
+
+    - name: Create "Cloud inventory Script" source (scm, update_on_launch, cache=300)
+      ansible.builtin.uri:
+        url: "{{ _api }}/inventory_sources/"
+        method: POST
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [201]
+        body_format: json
+        body:
+          name: "Cloud inventory Script"
+          inventory: "{{ _inv_id | int }}"
+          source: "scm"
+          source_project: "{{ _project_id | int }}"
+          source_path: "constructed-inventory/inventory-script"
+          update_on_launch: true
+          update_cache_timeout: 300
+          overwrite: true
+          overwrite_vars: true
+        return_content: true
+      register: r_src_create
+      ignore_errors: true
+      delegate_to: localhost
+      when:
+        - not (_src_exists | bool)
+        - _inv_id | string | length > 0
+        - _project_id | string | length > 0
+
+    - name: Set source ID from creation result
+      ansible.builtin.set_fact:
+        _src_id: "{{ r_src_create.json.id | default(_src_id) }}"
+      when: r_src_create is not skipped and (r_src_create.json.id | default('')) | string | length > 0
+
+    - name: Report source status
+      ansible.builtin.debug:
+        msg: >-
+          Cloud inventory Script source ID: {{ _src_id }}
+          ({{ 'pre-existing' if _src_exists else
+              ('created' if r_src_create is not skipped and r_src_create is not failed
+               else 'FAILED — check project ID and inventory ID') }})
+
+    # ── Task 6 ── Trigger inventory sync and wait ─────────────────────────────
+    - name: Trigger inventory sync for "Cloud inventory Script"
+      ansible.builtin.uri:
+        url: "{{ _api }}/inventory_sources/{{ _src_id }}/update/"
+        method: POST
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [202]
+        return_content: true
+      register: r_sync_trigger
+      ignore_errors: true
+      delegate_to: localhost
+      when: _src_id | string | length > 0
+
+    - name: Set sync job ID fact
+      ansible.builtin.set_fact:
+        _sync_job_id: "{{ r_sync_trigger.json.id | default('') }}"
+      when: r_sync_trigger is not skipped and r_sync_trigger is not failed
+
+    - name: Default sync job ID
+      ansible.builtin.set_fact:
+        _sync_job_id: ''
+      when: _sync_job_id is not defined
+
+    - name: Report sync trigger
+      ansible.builtin.debug:
+        msg: "Inventory sync job ID: {{ _sync_job_id }}"
+
+    # Poll sync status (up to 3 minutes: 18 retries x 10s)
+    - name: Wait for inventory sync to complete
+      ansible.builtin.uri:
+        url: "{{ _api }}/inventory_updates/{{ _sync_job_id }}/"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 15
+        status_code: [200]
+        return_content: true
+      register: r_sync_status
+      ignore_errors: true
+      delegate_to: localhost
+      until: r_sync_status.json.status | default('') in ['successful', 'failed', 'error', 'canceled']
+      retries: 18
+      delay: 10
+      when: _sync_job_id | string | length > 0
+
+    - name: Set sync final status fact
+      ansible.builtin.set_fact:
+        _sync_final_status: "{{ r_sync_status.json.status | default('unknown') }}"
+      when: r_sync_status is not skipped
+
+    - name: Default sync final status
+      ansible.builtin.set_fact:
+        _sync_final_status: "skipped"
+      when: _sync_final_status is not defined
+
+    - name: Report sync result
+      ansible.builtin.debug:
+        msg: >-
+          Inventory sync final status: {{ _sync_final_status }}
+          {%- if _sync_final_status == 'successful' %} — SUCCESS{%- endif %}
+          {%- if _sync_final_status in ['failed', 'error', 'canceled'] %} — check AAP UI for details{%- endif %}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 3 — Final report
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 05 Solve — final report
   hosts: localhost
-  connection: local
   gather_facts: false
   tasks:
-    - name: Report solve status
+    - name: Report module 05 solve completion
       ansible.builtin.debug:
         msg: |
-          dyninv.sh written and executable: check bastion:/home/{{ ssh_username | default('lab-user') }}/dyninv.sh
-          Cloud inventory created in AAP: check AAP UI -> Infrastructure -> Inventories
-          Cloud inventory Script source added (scm, update_on_launch=true, cache=300)
-          Inventory sync triggered (async) — come back in a few minutes and click Validate
+          Module 05 Solve complete.
+          dyninv.sh written to bastion: /home/{{ bastion_user | default('lab-user') }}/dyninv.sh
+          Cloud inventory created in AAP (org Default)
+          Cloud inventory Script source: scm, update_on_launch=true, cache=300
+          Inventory sync triggered and waited.
+          Click Validate to confirm all tasks pass.
