@@ -1,25 +1,61 @@
 ---
-- name: Module 03 - Workflows Validation
+# Module 03 Validate — Workflows
+#
+# Checks (all durable outcomes):
+#   Task 1: "Deploy Webapplication" workflow job template exists in AAP
+#   Task 2: Workflow has two nodes — Web Infra Deploy (start) and Web App Deploy (run on success)
+#   Task 3: Most recent workflow job for "Deploy Webapplication" has status=successful
+#   Task 4: HTTP GET http://{{ node1_hostname }}/nodejs returns 200 with "Hello World" in body
+#
+# Notes:
+#   - AAP 2.5 unified gateway: REST API base is /api/controller/v2/ (not /api/v2/)
+#   - Controller REST calls are delegated to localhost (runner can reach controller HTTPS)
+#   - NodeJS check uses curl via ansible.builtin.command on bastion (node1 DNS resolves there)
+
+# -------------------------------------------------------
+# Play 1 — Build dynamic bastion inventory from extravars
+# -------------------------------------------------------
+- name: Build bastion inventory
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: bastion
+        groups: bastion
+        ansible_host: "{{ bastion_host }}"
+        ansible_port: "{{ bastion_port | default(22) }}"
+        ansible_user: "{{ bastion_user | default('lab-user') }}"
+        ansible_password: "{{ bastion_password | default('') }}"
+        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: bastion_host | default('') | length > 0
+
+# -------------------------------------------------------
+# Play 2 — Run all validation checks
+# -------------------------------------------------------
+- name: Module 03 Validation — Workflows
   hosts: bastion
   gather_facts: false
   vars:
-    controller_url: "{{ controller_url | default('https://localhost') }}"
+    controller_url: "{{ controller_url | default('') }}"
     controller_username: "{{ controller_username | default('admin') }}"
     controller_password: "{{ controller_password | default('') }}"
-    node1_hostname: "{{ node1_hostname | default('') }}"
+    node1_hostname: "{{ node1_hostname | default('node1') }}"
     wfjt_name: "Deploy Webapplication"
 
   tasks:
 
     # -------------------------------------------------------
     # Check 1 — "Deploy Webapplication" workflow job template exists
+    # AAP 2.5 unified gateway: /api/controller/v2/ (not /api/v2/)
     # -------------------------------------------------------
     - name: Check "Deploy Webapplication" workflow job template exists
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/workflow_job_templates/?name=Deploy+Webapplication"
+        url: "{{ controller_url }}/api/controller/v2/workflow_job_templates/?name=Deploy+Webapplication"
         method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 15
@@ -27,10 +63,11 @@
         return_content: true
       register: r_wfjt
       ignore_errors: true
+      delegate_to: localhost
 
     # -------------------------------------------------------
     # Check 2 — Workflow template has both required nodes
-    #   Node 1: "Web Infra Deploy"  (first/run-always start node)
+    #   Node 1: "Web Infra Deploy"  (start node)
     #   Node 2: "Web App Deploy"    (run on success)
     # -------------------------------------------------------
     - name: Set WFJT ID fact
@@ -47,10 +84,10 @@
 
     - name: Fetch workflow nodes for "Deploy Webapplication"
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/workflow_job_templates/{{ _wfjt_id }}/workflow_nodes/?page_size=20"
+        url: "{{ controller_url }}/api/controller/v2/workflow_job_templates/{{ _wfjt_id }}/workflow_nodes/?page_size=20"
         method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 15
@@ -58,6 +95,7 @@
         return_content: true
       register: r_nodes
       ignore_errors: true
+      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     # -------------------------------------------------------
@@ -65,10 +103,10 @@
     # -------------------------------------------------------
     - name: Fetch most recent workflow jobs for "Deploy Webapplication"
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/v2/workflow_job_templates/{{ _wfjt_id }}/workflow_jobs/?order_by=-id&page_size=1"
+        url: "{{ controller_url }}/api/controller/v2/workflow_job_templates/{{ _wfjt_id }}/workflow_jobs/?order_by=-id&page_size=1"
         method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 15
@@ -76,21 +114,19 @@
         return_content: true
       register: r_jobs
       ignore_errors: true
+      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     # -------------------------------------------------------
     # Check 4 — NodeJS app returns HTTP 200 with "Hello World"
+    # curl on bastion: node1 DNS resolves from bastion (lab private network)
     # -------------------------------------------------------
     - name: Check NodeJS app returns Hello World on node1
-      ansible.builtin.uri:
-        url: "http://{{ node1_hostname }}/nodejs"
-        method: GET
-        validate_certs: false
-        timeout: 10
-        status_code: [200]
-        return_content: true
+      ansible.builtin.command:
+        cmd: "curl -sf --max-time 10 http://{{ node1_hostname }}/nodejs"
       register: r_nodejs
       ignore_errors: true
+      changed_when: false
       when: node1_hostname | default('') | length > 0
 
     # -------------------------------------------------------
@@ -113,8 +149,8 @@
         _task4_ok: >-
           {{
             r_nodejs is defined and r_nodejs is not skipped and r_nodejs is not failed
-            and r_nodejs.status | default(0) == 200
-            and 'Hello World' in (r_nodejs.content | default(''))
+            and r_nodejs.rc | default(1) == 0
+            and 'hello world' in (r_nodejs.stdout | default('') | lower)
           }}
 
     # -------------------------------------------------------
