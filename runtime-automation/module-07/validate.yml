@@ -16,7 +16,7 @@
 #   Task 12: Most recent sync of "Signed Project" after tamper failed with "Checksum mismatch"
 #
 # Variables injected at runtime (via AgV extravars):
-#   ssh_username        — bastion OS user (default: lab-user)
+#   bastion_user        — bastion OS user (from user_data bastion_ssh_user_name)
 #   gitea_username      — Gitea login
 #   gitea_password      — Gitea password
 #   gitea_url           — e.g. https://gitea-GUID.apps...
@@ -35,7 +35,7 @@
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
-        ansible_user: "{{ ssh_username | default('lab-user') }}"
+        ansible_user: "{{ bastion_user | default('lab-user') }}"
         ansible_ssh_private_key_file: /app/.ssh/id_rsa
         ansible_ssh_common_args: "-F /app/.ssh/config"
 
@@ -46,10 +46,11 @@
   hosts: bastion
   gather_facts: false
   vars:
-    ssh_username: "{{ ssh_username | default('lab-user') }}"
+    # _effective_user avoids self-referencing 'ssh_username' var recursion
+    _effective_user: "{{ bastion_user | default('lab-user') }}"
     gitea_controller_project: "playbooks-adv-controller"
-    project_dir: "/home/{{ ssh_username }}/{{ gitea_controller_project }}"
-    signing_asc: "/home/{{ ssh_username }}/signing_demo.asc"
+    project_dir: "/home/{{ _effective_user }}/{{ gitea_controller_project }}"
+    signing_asc: "/home/{{ _effective_user }}/signing_demo.asc"
 
   tasks:
 
@@ -149,7 +150,8 @@
     controller_url: "{{ controller_url | default('') }}"
     controller_username: "{{ controller_username | default('admin') }}"
     controller_password: "{{ controller_password | default('') }}"
-    aap_api: "{{ controller_url }}/api/v2"
+    # AAP 2.5 uses /api/controller/v2/ (not /api/v2/)
+    aap_api: "{{ controller_url }}/api/controller/v2"
 
   tasks:
 
@@ -409,7 +411,7 @@
     # Validate all tasks
     # -------------------------------------------------------
     - name: Validate all tasks
-      rhpds.ftl.validation_check:
+      validation_check:
         check: >-
           {{
             _task1_ok and _task2_ok and _task3_ok and _task4_ok

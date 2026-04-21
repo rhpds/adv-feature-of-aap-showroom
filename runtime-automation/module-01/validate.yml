@@ -3,10 +3,16 @@
 # Validate playbook
 #
 # What this checks:
-#   task-1: AAP controller URL is reachable (HTTP 200)
-#   task-2: AAP credentials are valid (GET /api/v2/me/ returns HTTP 200)
+#   task-1: AAP controller URL is reachable (HTTP 200 following redirects)
+#   task-2: AAP credentials are valid (GET /api/gateway/v1/me/ returns HTTP 200)
+#           Uses AAP 2.5 unified gateway API (replaces legacy /api/v2/me/)
 #
 # prose-03/04/05 are informational orientation content — no automatable outcome to check.
+#
+# Variable resolution order:
+#   controller_url      — extravar > derived from guid
+#   controller_username — extravar > bastion_user > 'lab-user'
+#   controller_password — extravar > bastion_password
 
 - name: Module 01 — Introduction to Unified UI Validation
   hosts: localhost
@@ -14,18 +20,20 @@
   gather_facts: false
   vars:
     student_user: "{{ user | default('') }}"
-    aap_url: "{{ controller_url | default('') }}"
-    aap_user: "{{ controller_username | default('admin') }}"
-    aap_pass: "{{ controller_password | default('') }}"
+    # Derive controller URL from guid if not explicitly provided
+    _default_controller_url: "https://controller-{{ guid | default('') }}.apps.ocpvdev01.rhdp.net"
+    aap_url: "{{ controller_url | default(_default_controller_url) }}"
+    aap_user: "{{ controller_username | default(bastion_user | default('lab-user')) }}"
+    aap_pass: "{{ controller_password | default(bastion_password | default('')) }}"
 
   tasks:
 
     # ------------------------------------------------------------------
-    # Guard: fail early if controller_url was not injected
+    # Guard: fail early if we can't determine controller_url
     # ------------------------------------------------------------------
-    - name: Fail early if controller_url is not set
+    - name: Fail early if controller_url cannot be determined
       ansible.builtin.fail:
-        msg: "controller_url extravar is empty — check AgV extravars injection"
+        msg: "controller_url extravar is empty and guid is also empty — cannot derive AAP URL"
       when: aap_url | length == 0
 
     # -------------------------------------------------------
@@ -43,11 +51,12 @@
       ignore_errors: true
 
     # -------------------------------------------------------
-    # Check 2 — AAP credentials are valid via /api/v2/me/
+    # Check 2 — AAP credentials valid via Gateway API /me/
+    #   AAP 2.5 unified UI uses /api/gateway/v1/ (not legacy /api/v2/)
     # -------------------------------------------------------
-    - name: Check AAP credentials via API (GET /api/v2/me/)
+    - name: Check AAP credentials via Gateway API (GET /api/gateway/v1/me/)
       ansible.builtin.uri:
-        url: "{{ aap_url }}/api/v2/me/"
+        url: "{{ aap_url }}/api/gateway/v1/me/"
         method: GET
         url_username: "{{ aap_user }}"
         url_password: "{{ aap_pass }}"
@@ -71,11 +80,11 @@
     # Validate all tasks
     # -------------------------------------------------------
     - name: Validate all tasks
-      rhpds.ftl.validation_check:
+      validation_check:
         check: "{{ _task1_ok and _task2_ok }}"
         pass_msg: |
           Task 1: AAP controller URL is reachable at {{ aap_url }}
-          Task 2: AAP credentials are valid (login succeeded)
+          Task 2: AAP credentials are valid (login succeeded via /api/gateway/v1/me/)
         error_msg: |
           {{ 'Task 1: AAP controller URL is reachable' if _task1_ok else 'Task 1: FAILED — AAP controller URL not reachable at ' ~ aap_url ~ ' — confirm controller_url extravar is correct and the AAP platform is running' }}
           {{ 'Task 2: AAP credentials are valid' if _task2_ok else 'Task 2: FAILED — Login rejected for user ' ~ aap_user ~ ' — confirm controller_username and controller_password extravars match the AAP credentials in your lab access page' }}

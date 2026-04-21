@@ -10,27 +10,35 @@
 # Automation strategy:
 #   - No VM-side state is created in this module (orientation only)
 #   - "Navigate and log in" is replaced by two REST checks:
-#       1. GET {{ controller_url }}          → HTTP 200 (UI reachable)
-#       2. GET {{ controller_url }}/api/v2/me/ with Basic Auth → HTTP 200 (credentials valid)
+#       1. GET {{ controller_url }}                    → HTTP 200 (UI reachable)
+#       2. GET {{ controller_url }}/api/gateway/v1/me/ → HTTP 200 with Basic Auth (credentials valid)
+#          AAP 2.5 unified gateway API path (replaces legacy /api/v2/me/)
 #   - Both checks run from localhost inside the runner container over HTTPS
+#
+# Variable resolution order:
+#   controller_url      — extravar > derived from guid
+#   controller_username — extravar > bastion_user > 'lab-user'
+#   controller_password — extravar > bastion_password
 
 - name: Module 01 — Introduction to Unified UI Solve
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    aap_url: "{{ controller_url | default('') }}"
-    aap_user: "{{ controller_username | default('admin') }}"
-    aap_pass: "{{ controller_password | default('') }}"
+    # Derive controller URL from guid if not explicitly provided
+    _default_controller_url: "https://controller-{{ guid | default('') }}.apps.ocpvdev01.rhdp.net"
+    aap_url: "{{ controller_url | default(_default_controller_url) }}"
+    aap_user: "{{ controller_username | default(bastion_user | default('lab-user')) }}"
+    aap_pass: "{{ controller_password | default(bastion_password | default('')) }}"
 
   tasks:
 
     # ------------------------------------------------------------------
-    # Guard: nothing to do if controller_url was not injected
+    # Guard: nothing to do if we can't determine controller_url
     # ------------------------------------------------------------------
-    - name: Fail early if controller_url is not set
+    - name: Fail early if controller_url cannot be determined
       ansible.builtin.fail:
-        msg: "controller_url extravar is empty — check AgV extravars injection"
+        msg: "controller_url extravar is empty and guid is also empty — cannot derive AAP URL"
       when: aap_url | length == 0
 
     # ------------------------------------------------------------------
@@ -52,13 +60,14 @@
         _url_ok: "{{ r_url_check.status | default(0) == 200 }}"
 
     # ------------------------------------------------------------------
-    # prose-02 — Verify login credentials via AAP REST API
-    #   GET /api/v2/me/ returns 200 + user data when Basic Auth is valid.
+    # prose-02 — Verify login credentials via AAP 2.5 Gateway REST API
+    #   GET /api/gateway/v1/me/ returns 200 + user data when Basic Auth is valid.
     #   Returns 401 on bad credentials.
+    #   Note: AAP 2.5 unified UI uses /api/gateway/v1/ (not legacy /api/v2/)
     # ------------------------------------------------------------------
-    - name: Verify AAP credentials via API (GET /api/v2/me/)
+    - name: Verify AAP credentials via Gateway API (GET /api/gateway/v1/me/)
       ansible.builtin.uri:
-        url: "{{ aap_url }}/api/v2/me/"
+        url: "{{ aap_url }}/api/gateway/v1/me/"
         method: GET
         url_username: "{{ aap_user }}"
         url_password: "{{ aap_pass }}"
@@ -89,5 +98,6 @@
     - name: Report solve status
       ansible.builtin.debug:
         msg: |
+          AAP controller URL : {{ aap_url }}
           AAP controller URL reachable : {{ 'ok' if _url_ok else 'NOT ok — ' ~ (r_url_check.msg | default('no response')) }}
           AAP credentials valid        : {{ 'ok' if _login_ok else 'NOT ok — check controller_username / controller_password extravars' }}

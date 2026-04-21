@@ -2,14 +2,18 @@
 # Module 08 Solve — The new Self-Service Automation Portal (SSAP)
 #
 # What this playbook automates:
-#   prose-01: Verify AAP OAuth app "Selfservice-*" exists (api — informational)
+#   prose-01: Create AAP OAuth app "Selfservice-AAP" (idempotent)
 #   prose-02: Create AAP team "aap-admins" in org Default (api)
 #   prose-03: SSAP OAuth sign-in — SKIP (browser OAuth consent, cannot automate)
 #   prose-04: SSAP RBAC create role "ssap_operators" — SKIP (no SSAP REST API documented)
 #   prose-05a: PATCH "Demo Job Template" description in AAP (api)
 #   prose-05b: SSAP "Sync now" — SKIP (no SSAP REST API documented)
 #   prose-06: Exploratory job run — SKIP
-#   prose-07: Import custom SSAP template from Gitea URL (ui-playwright)
+#   prose-07: Import custom SSAP template from Gitea URL
+#             - Sign in via Playwright to get Backstage Bearer token
+#             - Grant catalog-location create permission via RHDH RBAC API
+#             - Register Gitea template URL via /api/catalog/locations
+#             - Poll until "Manage RHEL Time Servers" appears in SSAP catalog
 #   prose-08: Launch custom template — SKIP (exploratory)
 
 - name: Module 08 Solve — Self-Service Automation Portal
@@ -20,22 +24,47 @@
     controller_url: "{{ controller_url | default('') }}"
     controller_username: "{{ controller_username | default('') }}"
     controller_password: "{{ controller_password | default('') }}"
-    ssap_url: "{{ ssap_url | default('') }}"
-    gitea_url: "{{ gitea_url | default('') }}"
-    gitea_username: "{{ gitea_username | default('') }}"
-    common_password: "{{ common_password | default('') }}"
-    # AAP API base (strips trailing slash if present)
-    aap_api: "{{ controller_url | regex_replace('/$', '') }}/api/v2"
+    guid: "{{ guid | default('') }}"
+    # ssap_url, gitea_url, gitea_username are NOT declared here — they are derived
+    # via set_fact below to avoid self-referential variable loops.
+    # AAP API base — AAP 2.5 uses /api/controller/v2/ (not /api/v2/)
+    aap_api: "{{ controller_url | regex_replace('/$', '') }}/api/controller/v2"
 
   tasks:
 
+    # Derive effective URLs from guid (these extravars are not in user_data.yml)
+    - name: Set effective SSAP and Gitea URLs derived from guid
+      ansible.builtin.set_fact:
+        _ssap_url: "https://ssap-portal-{{ guid }}.apps.ocpvdev01.rhdp.net"
+        _gitea_url: "https://gitea-{{ guid }}.apps.ocpvdev01.rhdp.net"
+        _gitea_username: "{{ controller_username }}"
+
     # -------------------------------------------------------------------------
-    # prose-01: Verify AAP OAuth app "Selfservice-*" exists
-    # GET /api/v2/o/applications/?name__startswith=Selfservice
+    # prose-01: Create AAP OAuth application "Selfservice-AAP" (idempotent)
+    # POST /api/controller/v2/applications/
+    # Required: authorization_grant_type=authorization-code, client_type=confidential
     # -------------------------------------------------------------------------
+    - name: Query org Default ID
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/organizations/?name=Default"
+        method: GET
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_org_pre
+      ignore_errors: true
+
+    - name: Set Default org ID fact
+      ansible.builtin.set_fact:
+        _default_org_id: "{{ (r_org_pre.json.results | default([]) | first).id | default(omit) }}"
+      when: r_org_pre.json.count | default(0) | int > 0
+
     - name: Query AAP OAuth applications named Selfservice-*
       ansible.builtin.uri:
-        url: "{{ aap_api }}/o/applications/?name__startswith=Selfservice"
+        url: "{{ aap_api }}/applications/?name__startswith=Selfservice"
         method: GET
         user: "{{ controller_username }}"
         password: "{{ controller_password }}"
@@ -46,36 +75,48 @@
       register: r_oauth_apps
       ignore_errors: true
 
-    - name: Set OAuth app found fact
+    - name: Create OAuth app Selfservice-AAP (if absent)
+      ansible.builtin.uri:
+        url: "{{ aap_api }}/applications/"
+        method: POST
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: raw
+        body: >-
+          {{
+            {
+              'name': 'Selfservice-AAP',
+              'description': 'OAuth2 application for SSAP integration',
+              'authorization_grant_type': 'authorization-code',
+              'client_type': 'confidential',
+              'organization': _default_org_id | int,
+              'redirect_uris': _ssap_url ~ '/api/auth/aap/handler/frame'
+            } | to_json
+          }}
+        headers:
+          Content-Type: "application/json"
+        status_code: [200, 201]
+      register: r_oauth_create
+      ignore_errors: true
+      when:
+        - _default_org_id is defined
+        - r_oauth_apps.json.count | default(0) | int == 0
+
+    - name: Set OAuth app fact
       ansible.builtin.set_fact:
         _oauth_app_ok: >-
           {{
-            r_oauth_apps.status | default(0) == 200
-            and (r_oauth_apps.json.count | default(0) | int) > 0
+            (r_oauth_apps.json.count | default(0) | int > 0)
+            or (r_oauth_create.status | default(0) in [200, 201])
           }}
 
     # -------------------------------------------------------------------------
     # prose-02: Create AAP team "aap-admins" in org Default
     # Idempotent: query first, create only if absent
     # -------------------------------------------------------------------------
-    - name: Query for org Default ID
-      ansible.builtin.uri:
-        url: "{{ aap_api }}/organizations/?name=Default"
-        method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
-        force_basic_auth: true
-        validate_certs: false
-        timeout: 30
-        status_code: [200]
-      register: r_org
-      ignore_errors: true
-
-    - name: Set Default org ID fact
-      ansible.builtin.set_fact:
-        _default_org_id: "{{ (r_org.json.results | default([]) | first).id | default(omit) }}"
-      when: r_org.json.count | default(0) | int > 0
-
     - name: Check if team aap-admins already exists
       ansible.builtin.uri:
         url: "{{ aap_api }}/teams/?name=aap-admins"
@@ -98,10 +139,10 @@
         force_basic_auth: true
         validate_certs: false
         timeout: 30
-        body_format: json
-        body:
-          name: "aap-admins"
-          organization: "{{ _default_org_id }}"
+        body_format: raw
+        body: "{{ {'name': 'aap-admins', 'organization': _default_org_id | int} | to_json }}"
+        headers:
+          Content-Type: "application/json"
         status_code: [200, 201]
       register: r_team_create
       ignore_errors: true
@@ -119,21 +160,13 @@
 
     # -------------------------------------------------------------------------
     # prose-03: SSAP OAuth sign-in — SKIP
-    # Cannot automate OAuth consent flow (browser redirect chain + Authorize button)
     # -------------------------------------------------------------------------
     # SKIP: prose-03 — SSAP OAuth sign-in
-    # Student step: Open ssap_url → Sign In → log in with AAP credentials → click Authorize
-    # Not automatable: OAuth consent requires interactive browser session; no headless workaround.
 
     # -------------------------------------------------------------------------
     # prose-04: SSAP RBAC create role "ssap_operators" — SKIP
-    # No SSAP REST API documented for role management; Backstage RBAC plugin
-    # requires authenticated session token obtained only after OAuth flow.
     # -------------------------------------------------------------------------
     # SKIP: prose-04 — SSAP RBAC create ssap_operators role
-    # Student step: Administration → RBAC → Create → name ssap_operators →
-    #               AAP Administrators group → Catalog + Scaffolder plugins + all perms → Create
-    # Not automatable: No SSAP REST API for role management; requires authenticated session from OAuth flow.
 
     # -------------------------------------------------------------------------
     # prose-05a: PATCH "Demo Job Template" description in AAP
@@ -183,23 +216,28 @@
           }}
 
     # -------------------------------------------------------------------------
-    # prose-05b: SSAP "Sync now" → Job templates — SKIP
-    # No SSAP REST API documented for triggering catalog sync.
+    # prose-05b: SSAP "Sync now" — SKIP
     # -------------------------------------------------------------------------
     # SKIP: prose-05b — SSAP Sync now
-    # Student step: In SSAP click "Sync now" → select Job templates → Ok → refresh page
-    # Not automatable: No SSAP REST API for catalog sync; requires authenticated SSAP session.
 
     # -------------------------------------------------------------------------
-    # prose-06: Execute job template — SKIP (exploratory, no validation target)
+    # prose-06: Execute job template — SKIP (exploratory)
     # -------------------------------------------------------------------------
     # SKIP: prose-06 — Run Demo Job Template in SSAP
-    # Student step: Click Start → optionally Cancel → observe Show Logs → Start Over
-    # Not automatable: Exploratory step, no persistent outcome to check.
 
     # -------------------------------------------------------------------------
-    # prose-07: Import custom template from Gitea URL (ui-playwright)
-    # SSAP Add Template → paste URL → Analyze → Import
+    # prose-07: Import custom template from Gitea URL
+    #
+    # SSAP uses RHDH (Red Hat Developer Hub 1.8.5 / Backstage 1.42.5).
+    # The "Add Template" button is only visible after the user has
+    # catalog-location create permission. Default RBAC denies this.
+    #
+    # Automation approach (idempotent):
+    #   1. Sign in via Playwright → OAuth → capture Backstage Bearer token
+    #   2. Create RBAC role "catalog-manager" for lab-user (idempotent via 409)
+    #   3. Grant catalog-location and catalog.entity.create policies
+    #   4. POST /api/catalog/locations with Gitea template URL
+    #   5. Poll catalog until "Manage RHEL Time Servers" (rhel-update-time-servers-dynamic) appears
     # -------------------------------------------------------------------------
     - name: Create evidence directory
       ansible.builtin.file:
@@ -208,7 +246,7 @@
         mode: "0755"
       ignore_errors: true
 
-    - name: "prose-07: Import custom SSAP template from Gitea via Playwright"
+    - name: "prose-07: Import custom SSAP template from Gitea via API + Playwright OAuth"
       ansible.builtin.command:
         argv:
           - node
@@ -216,8 +254,10 @@
           - |
             const {chromium} = require('playwright');
             (async () => {
-              const templateUrl = `{{ gitea_url }}/{{ gitea_username }}/ssap-customtemplates/raw/branch/main/rhel_dynamic.yml`;
-              const ssapUrl = `{{ ssap_url }}`;
+              const templateUrl = `{{ _gitea_url }}/{{ _gitea_username }}/ssap-customtemplates/raw/branch/main/rhel_dynamic.yml`;
+              const ssapUrl = `{{ _ssap_url }}`;
+              const aapUser = `{{ controller_username }}`;
+              const aapPass = `{{ controller_password }}`;
 
               const b = await chromium.launch({
                 headless: true,
@@ -226,111 +266,184 @@
               const ctx = await b.newContext({ignoreHTTPSErrors: true});
               const p = await ctx.newPage();
 
-              // INTENT: Navigate to SSAP, sign in with AAP credentials, and import the Gitea custom template
+              // INTENT: Sign in to SSAP via AAP OAuth, capture Backstage Bearer token,
+              //         grant catalog-location create permission, register Gitea template URL,
+              //         verify "Manage RHEL Time Servers" appears in SSAP catalog.
 
-              // Step 1: Navigate to SSAP and sign in
-              console.log('Navigating to SSAP:', ssapUrl);
-              await p.goto(ssapUrl, {waitUntil: 'domcontentloaded', timeout: 60000});
+              // Capture Backstage Bearer token from outgoing API requests
+              let backstageToken = null;
+              p.on('request', req => {
+                const h = req.headers();
+                if (h['authorization'] && h['authorization'].startsWith('Bearer ') && !backstageToken) {
+                  backstageToken = h['authorization'];
+                }
+              });
+
+              // Step 1: Navigate to SSAP catalog page — wait for SPA to fully render
+              console.log('Step 1: Navigate to SSAP catalog page...');
+              await p.goto(`${ssapUrl}/self-service/catalog`, {waitUntil: 'networkidle', timeout: 60000});
               await p.screenshot({path: '/tmp/evidence/step-07-01-ssap-loaded.png'});
+              console.log('URL:', p.url());
 
-              // Click Sign In
+              // Sign in if not already authenticated
               const signInBtn = p.getByRole('button', {name: /sign in/i});
-              if (await signInBtn.isVisible({timeout: 10000}).catch(() => false)) {
+              const isSignInVisible = await signInBtn.isVisible({timeout: 25000}).catch(() => false);
+              console.log('Sign In visible:', isSignInVisible);
+
+              if (isSignInVisible) {
                 await signInBtn.click();
-                console.log('Clicked Sign In');
+                await p.waitForTimeout(3000);
+                await p.screenshot({path: '/tmp/evidence/step-07-02-aap-login-page.png'});
+
+                // AAP Gateway login: input[type="text"] for username, input[type="password"] for password
+                const usernameInput = p.locator('input[type="text"]').first();
+                if (await usernameInput.isVisible({timeout: 10000}).catch(() => false)) {
+                  await usernameInput.fill(aapUser);
+                  await p.locator('input[type="password"]').first().fill(aapPass);
+                  await p.getByRole('button', {name: /log in/i}).first().click();
+                  console.log('Submitted AAP login credentials');
+                  await p.waitForTimeout(5000);
+                  await p.screenshot({path: '/tmp/evidence/step-07-03-after-login.png'});
+                } else {
+                  console.log('AAP login form not found — already logged in or different flow');
+                }
+
+                // OAuth consent page — click Authorize if prompted
+                const authorizeBtn = p.getByRole('button', {name: /authorize/i});
+                if (await authorizeBtn.isVisible({timeout: 8000}).catch(() => false)) {
+                  await authorizeBtn.click();
+                  console.log('Clicked Authorize on OAuth consent page');
+                  await p.waitForTimeout(4000);
+                }
               } else {
-                console.log('Sign In button not visible — may already be logged in');
+                console.log('Already authenticated — no Sign In button');
               }
 
-              // AAP login form (if redirected)
+              // Wait for SSAP catalog to load and capture the Bearer token
+              await p.waitForURL(/self-service\/catalog/, {timeout: 30000}).catch(() => {});
+              await p.waitForTimeout(4000);
+              await p.screenshot({path: '/tmp/evidence/step-07-04-ssap-catalog.png'});
+
+              // If token not captured yet, reload to trigger API calls
+              if (!backstageToken) {
+                await p.reload({waitUntil: 'networkidle', timeout: 30000});
+                await p.waitForTimeout(3000);
+              }
+
+              if (!backstageToken) {
+                throw new Error('Could not capture Backstage Bearer token after sign-in');
+              }
+              console.log('Backstage token captured (first 30 chars):', backstageToken.substring(0, 30));
+
+              // Step 2: Check if template is already in catalog (idempotency check)
+              console.log('Step 2: Check if template already registered...');
+              const checkCatalog = async () => {
+                const r = await p.evaluate(async (args) => {
+                  const resp = await fetch(args.url, {
+                    headers: {'Authorization': args.tok, 'Accept': 'application/json'}
+                  });
+                  const body = await resp.text();
+                  return {status: resp.status, body};
+                }, {url: `${ssapUrl}/api/catalog/entities?filter=kind%3Dtemplate`, tok: backstageToken});
+                if (r.status !== 200) return false;
+                const entities = JSON.parse(r.body);
+                return entities.some(e =>
+                  (e.metadata.title || '').includes('Manage RHEL Time Servers') ||
+                  e.metadata.name === 'rhel-update-time-servers-dynamic'
+                );
+              };
+
+              if (await checkCatalog()) {
+                console.log('Template already in catalog — skipping registration (idempotent)');
+              } else {
+                // Step 3: Grant catalog-location create permission via RHDH RBAC API
+                // Create a new role "catalog-manager" for lab-user (skip if 409 conflict = already exists)
+                console.log('Step 3: Grant catalog-location create permission...');
+                const createRole = await p.evaluate(async (args) => {
+                  const r = await fetch(args.url, {
+                    method: 'POST',
+                    headers: {'Authorization': args.tok, 'Accept': 'application/json', 'Content-Type': 'application/json'},
+                    body: JSON.stringify({memberReferences: [args.userRef], name: 'role:default/catalog-manager'})
+                  });
+                  return {status: r.status, body: await r.text()};
+                }, {url: `${ssapUrl}/api/permission/roles`, tok: backstageToken, userRef: `user:default/${aapUser}`});
+                console.log('Create role catalog-manager:', createRole.status, createRole.body.substring(0, 100));
+
+                // Add catalog-location and catalog.entity.create policies (skip if 409 = already exists)
+                const addPolicies = await p.evaluate(async (args) => {
+                  const r = await fetch(args.url, {
+                    method: 'POST',
+                    headers: {'Authorization': args.tok, 'Accept': 'application/json', 'Content-Type': 'application/json'},
+                    body: JSON.stringify([
+                      {entityReference: 'role:default/catalog-manager', permission: 'catalog-location', policy: 'create', effect: 'allow'},
+                      {entityReference: 'role:default/catalog-manager', permission: 'catalog-location', policy: 'read', effect: 'allow'},
+                      {entityReference: 'role:default/catalog-manager', permission: 'catalog-entity', policy: 'read', effect: 'allow'},
+                      {entityReference: 'role:default/catalog-manager', permission: 'catalog.entity.create', policy: 'create', effect: 'allow'}
+                    ])
+                  });
+                  return {status: r.status, body: await r.text()};
+                }, {url: `${ssapUrl}/api/permission/policies`, tok: backstageToken});
+                console.log('Add policies:', addPolicies.status, addPolicies.body.substring(0, 100));
+
+                // Step 4: Register the Gitea template URL via Backstage catalog locations API
+                console.log('Step 4: Register Gitea template URL in SSAP catalog...');
+                const register = await p.evaluate(async (args) => {
+                  const r = await fetch(args.url, {
+                    method: 'POST',
+                    headers: {'Authorization': args.tok, 'Accept': 'application/json', 'Content-Type': 'application/json'},
+                    body: JSON.stringify({type: 'url', target: args.target})
+                  });
+                  const body = await r.text();
+                  return {status: r.status, body};
+                }, {url: `${ssapUrl}/api/catalog/locations`, tok: backstageToken, target: templateUrl});
+                console.log('Register location:', register.status, register.body.substring(0, 200));
+
+                if (![200, 201].includes(register.status)) {
+                  throw new Error(`Failed to register template location: HTTP ${register.status} — ${register.body}`);
+                }
+
+                // Step 5: Poll catalog until template appears (up to 90s)
+                console.log('Step 5: Waiting for RHDH to process template...');
+                let found = false;
+                for (let i = 0; i < 18; i++) {
+                  await p.waitForTimeout(5000);
+                  found = await checkCatalog();
+                  if (found) {
+                    console.log(`Template found after ${(i+1)*5}s`);
+                    break;
+                  }
+                  console.log(`  Attempt ${i+1}/18 — template not yet in catalog`);
+                }
+
+                if (!found) {
+                  throw new Error('Template "Manage RHEL Time Servers" not in SSAP catalog after 90s');
+                }
+              }
+
+              // Navigate to catalog page and capture final state
+              await p.goto(`${ssapUrl}/self-service/catalog`, {waitUntil: 'networkidle', timeout: 30000});
               await p.waitForTimeout(3000);
-              await p.screenshot({path: '/tmp/evidence/step-07-02-after-signin-click.png'});
-
-              const usernameInput = p.locator('input[name="username"], input[id="id_username"], input[type="text"]').first();
-              if (await usernameInput.isVisible({timeout: 8000}).catch(() => false)) {
-                await usernameInput.fill(`{{ controller_username }}`);
-                const passwordInput = p.locator('input[name="password"], input[id="id_password"], input[type="password"]').first();
-                await passwordInput.fill(`{{ controller_password }}`);
-                await p.getByRole('button', {name: /log in|sign in|next/i}).first().click();
-                console.log('Submitted AAP login credentials');
-                await p.waitForTimeout(3000);
-              }
-
-              // Authorize page
-              await p.screenshot({path: '/tmp/evidence/step-07-03-after-aap-login.png'});
-              const authorizeBtn = p.getByRole('button', {name: /authorize/i});
-              if (await authorizeBtn.isVisible({timeout: 8000}).catch(() => false)) {
-                await authorizeBtn.click();
-                console.log('Clicked Authorize');
-                await p.waitForTimeout(3000);
-              }
-
-              // Step 2: Navigate to SSAP and click Add Template
-              await p.waitForTimeout(2000);
-              await p.screenshot({path: '/tmp/evidence/step-07-04-ssap-home.png'});
-
-              // Look for Add Template button
-              const addTemplateBtn = p.getByRole('button', {name: /add template/i});
-              await addTemplateBtn.waitFor({timeout: 15000});
-              await addTemplateBtn.click();
-              console.log('Clicked Add Template');
-              await p.waitForTimeout(2000);
-              await p.screenshot({path: '/tmp/evidence/step-07-05-add-template-dialog.png'});
-
-              // Step 3: Paste the Gitea URL
-              const urlInput = p.locator('input[placeholder*="URL"], input[type="url"], input[type="text"]').first();
-              await urlInput.waitFor({timeout: 10000});
-              await urlInput.fill(templateUrl);
-              console.log('Pasted template URL:', templateUrl);
-              await p.screenshot({path: '/tmp/evidence/step-07-06-url-pasted.png'});
-
-              // Step 4: Click Analyze
-              await p.getByRole('button', {name: /analyze/i}).click();
-              console.log('Clicked Analyze');
-              await p.waitForTimeout(5000);
-              await p.screenshot({path: '/tmp/evidence/step-07-07-after-analyze.png'});
-
-              // Step 5: Click Import (on the Review step)
-              const importBtn = p.getByRole('button', {name: /import/i});
-              await importBtn.waitFor({timeout: 20000});
-              await importBtn.click();
-              console.log('Clicked Import');
-              await p.waitForTimeout(5000);
-              await p.screenshot({path: '/tmp/evidence/step-07-08-after-import.png'});
-
-              // Step 6: Verify "Manage RHEL Time Servers" appears in the template list
-              const templateEntry = p.getByText(/Manage RHEL Time Servers/i);
-              const found = await templateEntry.isVisible({timeout: 15000}).catch(() => false);
-              if (found) {
-                console.log('SUCCESS: Custom template "Manage RHEL Time Servers" is visible in SSAP');
-                await p.screenshot({path: '/tmp/evidence/step-07-09-template-imported.png'});
-              } else {
-                console.log('WARNING: Custom template not yet visible — may need a page refresh');
-                await p.reload({waitUntil: 'domcontentloaded', timeout: 30000});
-                await p.waitForTimeout(3000);
-                const foundAfterRefresh = await p.getByText(/Manage RHEL Time Servers/i).isVisible({timeout: 10000}).catch(() => false);
-                console.log(foundAfterRefresh ? 'SUCCESS after refresh' : 'NOT FOUND after refresh');
-                await p.screenshot({path: '/tmp/evidence/step-07-10-after-refresh.png'});
-              }
+              await p.screenshot({path: '/tmp/evidence/step-07-05-catalog-with-template.png', fullPage: false});
+              console.log('SUCCESS: Custom template "Manage RHEL Time Servers" is in SSAP catalog');
 
               await b.close();
             })().catch(async e => {
               const {chromium} = require('playwright');
               const b2 = await chromium.launch({headless: true, args: ['--no-sandbox']}).catch(() => null);
               if (b2) {
-                const p2 = await b2.newContext({ignoreHTTPSErrors: true}).then(c => c.newPage());
+                const ctx2 = await b2.newContext({ignoreHTTPSErrors: true});
+                const p2 = await ctx2.newPage();
                 await p2.screenshot({path: '/tmp/playwright-debug.png'}).catch(() => {});
                 await b2.close();
               }
               console.error('FAILED:', e.message);
-              console.error('INTENT: Navigate to SSAP → sign in with AAP creds → click Add Template → paste Gitea URL → Analyze → Import → confirm Manage RHEL Time Servers appears');
+              console.error('INTENT: Sign in to SSAP → capture Backstage token → grant catalog-location create → register Gitea URL → confirm Manage RHEL Time Servers in catalog');
               process.exit(1);
             });
       environment:
         PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
       register: r_playwright_import
       ignore_errors: true
-      when: ssap_url | length > 0 and gitea_url | length > 0
 
     - name: Set custom template import fact
       ansible.builtin.set_fact:
@@ -344,22 +457,19 @@
     # prose-08: Launch custom template — SKIP (exploratory)
     # -------------------------------------------------------------------------
     # SKIP: prose-08 — Launch the custom dynamic template
-    # Student step: Start → examine options → Enable Show Advanced Options → Next → Create
-    # Not automatable: Exploratory step with no persistent outcome to validate.
 
     # -------------------------------------------------------------------------
     # Verify SSAP is reachable (HTTP 200) — baseline check
     # -------------------------------------------------------------------------
     - name: Check SSAP is reachable (HTTP 200)
       ansible.builtin.uri:
-        url: "{{ ssap_url }}"
+        url: "{{ _ssap_url }}"
         method: GET
         validate_certs: false
         timeout: 15
         status_code: [200, 302]
       register: r_ssap_reachable
       ignore_errors: true
-      when: ssap_url | length > 0
 
     - name: Set SSAP reachable fact
       ansible.builtin.set_fact:
@@ -396,10 +506,10 @@
     - name: Report solve status
       ansible.builtin.debug:
         msg: |
-          AAP OAuth app Selfservice-* found:                {{ 'ok' if _oauth_app_ok else 'NOT ok' }}
-          AAP team aap-admins created in org Default:       {{ 'ok' if _team_ok | default(false) else 'NOT ok' }}
-          SSAP accessible (HTTP 200/302):                   {{ 'ok' if _ssap_reachable | default(false) else 'NOT ok' }}
-          Demo Job Template description set:                {{ 'ok' if _demo_jt_desc_ok | default(false) else 'NOT ok — expected "Say hello to the world"' }}
+          AAP OAuth app Selfservice-* found/created:           {{ 'ok' if _oauth_app_ok | default(false) else 'NOT ok' }}
+          AAP team aap-admins created in org Default:          {{ 'ok' if _team_ok | default(false) else 'NOT ok' }}
+          SSAP accessible (HTTP 200/302):                      {{ 'ok' if _ssap_reachable | default(false) else 'NOT ok' }}
+          Demo Job Template description set:                   {{ 'ok' if _demo_jt_desc_ok | default(false) else 'NOT ok — expected "Say hello to the world"' }}
           Custom template imported (Manage RHEL Time Servers): {{ 'ok' if _custom_template_imported | default(false) else 'NOT ok — check /tmp/evidence/ screenshots' }}
 
           SKIPPED (no API / non-automatable):

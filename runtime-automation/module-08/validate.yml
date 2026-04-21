@@ -8,7 +8,7 @@
 #   task-03: SSAP portal accessible (HTTP 200 or 302)
 #   task-04: AAP "Demo Job Template" description == "Say hello to the world"
 #   task-05: SSAP catalog contains "Manage RHEL Time Servers" template
-#            (checked via Playwright — Backstage catalog API requires authenticated session)
+#            (checked via Playwright — RHDH catalog API requires Backstage Bearer token)
 
 - name: Module 08 Validation — Self-Service Automation Portal
   hosts: localhost
@@ -19,20 +19,29 @@
     controller_url: "{{ controller_url | default('') }}"
     controller_username: "{{ controller_username | default('') }}"
     controller_password: "{{ controller_password | default('') }}"
-    ssap_url: "{{ ssap_url | default('') }}"
-    # AAP API base (strips trailing slash if present)
-    aap_api: "{{ controller_url | regex_replace('/$', '') }}/api/v2"
+    guid: "{{ guid | default('') }}"
+    # AAP API base — AAP 2.5 uses /api/controller/v2/ (not /api/v2/)
+    aap_api: "{{ controller_url | regex_replace('/$', '') }}/api/controller/v2"
+    # ssap_url is NOT declared here — extravars may or may not include it.
+    # _ssap_url is computed via set_fact in the first task below.
 
   tasks:
+
+    # Derive effective SSAP URL from guid (ssap_url is not in user_data.yml extravars).
+    - name: Set effective SSAP URL derived from guid
+      ansible.builtin.set_fact:
+        _ssap_url: "https://ssap-portal-{{ guid }}.apps.ocpvdev01.rhdp.net"
 
     # -------------------------------------------------------
     # Check 1 — AAP OAuth app "Selfservice-*" exists with
     #            authorization_grant_type=authorization-code,
     #            client_type=confidential in org Default
+    # Note: In AAP 2.5 the applications endpoint is
+    #       /api/controller/v2/applications/ (not /o/applications/)
     # -------------------------------------------------------
     - name: Query AAP OAuth applications named Selfservice-*
       ansible.builtin.uri:
-        url: "{{ aap_api }}/o/applications/?name__startswith=Selfservice"
+        url: "{{ aap_api }}/applications/?name__startswith=Selfservice"
         method: GET
         user: "{{ controller_username }}"
         password: "{{ controller_password }}"
@@ -88,7 +97,7 @@
       register: r_org
       ignore_errors: true
 
-    - name: Set team check fact
+    - name: Set Default org ID fact
       ansible.builtin.set_fact:
         _default_org_id: "{{ (r_org.json.results | default([]) | first).id | default(-1) }}"
 
@@ -113,7 +122,7 @@
     # -------------------------------------------------------
     - name: Check SSAP portal is reachable
       ansible.builtin.uri:
-        url: "{{ ssap_url }}"
+        url: "{{ _ssap_url }}"
         method: GET
         validate_certs: false
         timeout: 10
@@ -121,7 +130,6 @@
         follow_redirects: none
       register: r_ssap
       ignore_errors: true
-      when: ssap_url | length > 0
 
     - name: Set SSAP reachable fact
       ansible.builtin.set_fact:
@@ -156,9 +164,13 @@
 
     # -------------------------------------------------------
     # Check 5 — SSAP catalog contains "Manage RHEL Time Servers"
-    # The Backstage catalog API (/api/catalog/entities) requires
-    # an authenticated session token obtained after the OAuth flow.
-    # Playwright is used to sign in and fetch the catalog page.
+    # RHDH (Red Hat Developer Hub 1.8.5 / Backstage 1.42.5) requires
+    # a Backstage Bearer token for catalog API access. Playwright is
+    # used to sign in via AAP OAuth and capture the token from
+    # outgoing API requests, then use it directly.
+    #
+    # Template name in catalog: rhel-update-time-servers-dynamic
+    # Template title: "Manage RHEL Time Servers" (with emoji prefix)
     # -------------------------------------------------------
     - name: "Playwright — check SSAP catalog for Manage RHEL Time Servers template"
       ansible.builtin.command:
@@ -168,7 +180,7 @@
           - |
             const {chromium} = require('playwright');
             (async () => {
-              const ssapUrl = `{{ ssap_url }}`;
+              const ssapUrl = `{{ _ssap_url }}`;
               const aapUser = `{{ controller_username }}`;
               const aapPass = `{{ controller_password }}`;
 
@@ -179,64 +191,80 @@
               const ctx = await b.newContext({ignoreHTTPSErrors: true});
               const p = await ctx.newPage();
 
-              // Navigate to SSAP
-              await p.goto(ssapUrl, {waitUntil: 'domcontentloaded', timeout: 60000});
+              // Capture Backstage Bearer token from outgoing API requests
+              let backstageToken = null;
+              p.on('request', req => {
+                const h = req.headers();
+                if (h['authorization'] && h['authorization'].startsWith('Bearer ') && !backstageToken) {
+                  backstageToken = h['authorization'];
+                }
+              });
+
+              // Navigate to SSAP catalog — use networkidle for SPA render
+              await p.goto(`${ssapUrl}/self-service/catalog`, {waitUntil: 'networkidle', timeout: 60000});
 
               // Sign in if the Sign In button is visible
               const signInBtn = p.getByRole('button', {name: /sign in/i});
-              if (await signInBtn.isVisible({timeout: 10000}).catch(() => false)) {
+              if (await signInBtn.isVisible({timeout: 25000}).catch(() => false)) {
                 await signInBtn.click();
                 await p.waitForTimeout(3000);
+
+                // AAP Gateway login: input[type="text"] for username, input[type="password"] for password
+                const usernameInput = p.locator('input[type="text"]').first();
+                if (await usernameInput.isVisible({timeout: 10000}).catch(() => false)) {
+                  await usernameInput.fill(aapUser);
+                  await p.locator('input[type="password"]').first().fill(aapPass);
+                  await p.getByRole('button', {name: /log in/i}).first().click();
+                  await p.waitForTimeout(5000);
+                }
+
+                // OAuth consent page
+                const authorizeBtn = p.getByRole('button', {name: /authorize/i});
+                if (await authorizeBtn.isVisible({timeout: 8000}).catch(() => false)) {
+                  await authorizeBtn.click();
+                  await p.waitForTimeout(4000);
+                }
               }
 
-              // Fill AAP login credentials if redirected
-              const usernameInput = p.locator(
-                'input[name="username"], input[id="id_username"], input[type="text"]'
-              ).first();
-              if (await usernameInput.isVisible({timeout: 8000}).catch(() => false)) {
-                await usernameInput.fill(aapUser);
-                const passwordInput = p.locator(
-                  'input[name="password"], input[id="id_password"], input[type="password"]'
-                ).first();
-                await passwordInput.fill(aapPass);
-                await p.getByRole('button', {name: /log in|sign in|next/i}).first().click();
+              // Wait for SSAP catalog to fully load and token to be captured
+              await p.waitForURL(/self-service\/catalog/, {timeout: 30000}).catch(() => {});
+              await p.waitForTimeout(4000);
+
+              // If token not captured yet, reload to trigger API calls
+              if (!backstageToken) {
+                await p.reload({waitUntil: 'networkidle', timeout: 30000});
                 await p.waitForTimeout(3000);
               }
 
-              // Authorize OAuth consent if prompted
-              const authorizeBtn = p.getByRole('button', {name: /authorize/i});
-              if (await authorizeBtn.isVisible({timeout: 8000}).catch(() => false)) {
-                await authorizeBtn.click();
-                await p.waitForTimeout(3000);
-              }
+              if (backstageToken) {
+                // Use Backstage Bearer token to query catalog API
+                const apiUrl = `${ssapUrl}/api/catalog/entities?filter=kind%3Dtemplate`;
+                const response = await p.evaluate(async ({url, tok}) => {
+                  const r = await fetch(url, {
+                    headers: {'Authorization': tok, 'Accept': 'application/json'}
+                  });
+                  const text = await r.text();
+                  return {status: r.status, body: text};
+                }, {url: apiUrl, tok: backstageToken});
 
-              // Wait for SSAP main page to load
-              await p.waitForTimeout(3000);
+                console.log('CATALOG_API_STATUS:' + response.status);
 
-              // Use the Backstage catalog API with the authenticated session cookie
-              const cookies = await ctx.cookies();
-              const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-
-              const apiUrl = `${ssapUrl}/api/catalog/entities?filter=kind=Template`;
-              const response = await p.evaluate(async ({url, cookieStr}) => {
-                const r = await fetch(url, {
-                  headers: {'Cookie': cookieStr, 'Accept': 'application/json'},
-                  credentials: 'include'
-                });
-                const text = await r.text();
-                return {status: r.status, body: text};
-              }, {url: apiUrl, cookieStr: cookieHeader});
-
-              const found = response.body.includes('Manage RHEL Time Servers');
-              console.log('CATALOG_API_STATUS:' + response.status);
-              console.log(found ? 'TEMPLATE_FOUND:true' : 'TEMPLATE_FOUND:false');
-
-              // Fallback: check SSAP templates page in the browser if API returned non-200
-              if (!found) {
-                await p.goto(`${ssapUrl}/create`, {waitUntil: 'domcontentloaded', timeout: 30000});
+                if (response.status === 200) {
+                  const found = response.body.includes('Manage RHEL Time Servers') ||
+                                response.body.includes('rhel-update-time-servers-dynamic');
+                  console.log(found ? 'TEMPLATE_FOUND:true' : 'TEMPLATE_FOUND:false');
+                } else {
+                  console.log('TEMPLATE_FOUND:false');
+                  console.log('API_ERROR:' + response.body.substring(0, 200));
+                }
+              } else {
+                // Fallback: check page content after full render
+                await p.goto(`${ssapUrl}/self-service/catalog`, {waitUntil: 'networkidle', timeout: 30000});
                 await p.waitForTimeout(4000);
                 const pageContent = await p.content();
-                const foundOnPage = pageContent.includes('Manage RHEL Time Servers');
+                const foundOnPage = pageContent.includes('Manage RHEL Time Servers') ||
+                                    pageContent.includes('rhel-update-time-servers-dynamic');
+                console.log('CATALOG_API_STATUS:0');
                 console.log(foundOnPage ? 'TEMPLATE_FOUND_ON_PAGE:true' : 'TEMPLATE_FOUND_ON_PAGE:false');
               }
 
@@ -249,7 +277,6 @@
       environment:
         PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
       register: r_playwright_catalog
-      when: ssap_url | length > 0
       ignore_errors: true
 
     - name: Set SSAP catalog template check fact
@@ -278,7 +305,7 @@
         _task5_ok: "{{ _task5_ok | default(false) }}"
 
     - name: Validate all tasks
-      rhpds.ftl.validation_check:
+      validation_check:
         check: "{{ _task1_ok and _task2_ok and _task3_ok and _task4_ok and _task5_ok }}"
         pass_msg: |
           Task 1: AAP OAuth app Selfservice-* exists with authorization_grant_type=authorization-code and client_type=confidential
