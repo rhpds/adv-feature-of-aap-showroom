@@ -2,60 +2,70 @@
 # Module 03 Validate — Workflows
 #
 # Checks (all durable outcomes):
-#   Task 1: "Deploy Webapplication" workflow job template exists in AAP
-#   Task 2: Workflow has two nodes — Web Infra Deploy (start) and Web App Deploy (run on success)
+#   Task 1: "Deploy Webapplication" workflow job template exists in org Default
+#   Task 2: Workflow has exactly the two required nodes:
+#             "Web Infra Deploy" (identifier) and "Web App Deploy" (identifier)
+#           AND the success_nodes link from Web Infra Deploy -> Web App Deploy exists
 #   Task 3: Most recent workflow job for "Deploy Webapplication" has status=successful
-#   Task 4: HTTP GET http://{{ node1_hostname }}/nodejs returns 200 with "Hello World" in body
+#   Task 4: curl http://node1/nodejs returns HTTP 200 with "Hello World" in body
+#             (curl delegated to bastion; node1 DNS resolves only from bastion)
 #
 # Notes:
-#   - AAP 2.5 unified gateway: REST API base is /api/controller/v2/ (not /api/v2/)
-#   - Controller REST calls are delegated to localhost (runner can reach controller HTTPS)
-#   - NodeJS check uses curl via ansible.builtin.command on bastion (node1 DNS resolves there)
+#   - AAP 2.5 unified gateway REST base: /api/controller/v2/
+#   - All variables resolved via lookup('ansible.builtin.env', 'VAR_NAME') — no bare extravars.
+#   - AAP REST calls use ansible.builtin.uri delegated to localhost (runner reaches controller HTTPS).
+#   - NodeJS curl runs directly on bastion (node1 is on the lab private network).
 
-# -------------------------------------------------------
-# Play 1 — Build dynamic bastion inventory from extravars
-# -------------------------------------------------------
+# -------------------------------------------------------------------------
+# Play 1 — Build dynamic bastion inventory from environment variables
+# -------------------------------------------------------------------------
 - name: Build bastion inventory
   hosts: localhost
+  connection: local
   gather_facts: false
+  vars:
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22') }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
+
   tasks:
+
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
         groups: bastion
-        ansible_host: "{{ bastion_host }}"
-        ansible_port: "{{ bastion_port | default(22) }}"
-        ansible_user: "{{ bastion_user | default('lab-user') }}"
-        ansible_password: "{{ bastion_password | default('') }}"
-        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_host: "{{ _ssh_host }}"
+        ansible_port: "{{ _ssh_port | int }}"
+        ansible_user: "{{ _ssh_user }}"
+        ansible_password: "{{ _ssh_pass }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: bastion_host | default('') | length > 0
+      when: _ssh_host | length > 0
 
-# -------------------------------------------------------
-# Play 2 — Run all validation checks
-# -------------------------------------------------------
+# -------------------------------------------------------------------------
+# Play 2 — REST API checks against AAP controller (delegated to localhost)
+#           and NodeJS curl check run directly on bastion
+# -------------------------------------------------------------------------
 - name: Module 03 Validation — Workflows
   hosts: bastion
   gather_facts: false
   vars:
-    controller_url: "{{ controller_url | default('') }}"
-    controller_username: "{{ controller_username | default('admin') }}"
-    controller_password: "{{ controller_password | default('') }}"
-    node1_hostname: "{{ node1_hostname | default('node1') }}"
-    wfjt_name: "Deploy Webapplication"
+    _ctrl_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
+    _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+    _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+    _api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}/api/controller/v2"
 
   tasks:
 
     # -------------------------------------------------------
-    # Check 1 — "Deploy Webapplication" workflow job template exists
-    # AAP 2.5 unified gateway: /api/controller/v2/ (not /api/v2/)
+    # Check 1 — "Deploy Webapplication" workflow JT exists
     # -------------------------------------------------------
     - name: Check "Deploy Webapplication" workflow job template exists
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/controller/v2/workflow_job_templates/?name=Deploy+Webapplication"
+        url: "{{ _api }}/workflow_job_templates/?name=Deploy+Webapplication"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 15
@@ -65,12 +75,7 @@
       ignore_errors: true
       delegate_to: localhost
 
-    # -------------------------------------------------------
-    # Check 2 — Workflow template has both required nodes
-    #   Node 1: "Web Infra Deploy"  (start node)
-    #   Node 2: "Web App Deploy"    (run on success)
-    # -------------------------------------------------------
-    - name: Set WFJT ID fact
+    - name: Set WFJT ID and count facts
       ansible.builtin.set_fact:
         _wfjt_id: "{{ r_wfjt.json.results[0].id | default('') }}"
         _wfjt_count: "{{ r_wfjt.json.count | default(0) | int }}"
@@ -82,12 +87,15 @@
         _wfjt_count: 0
       when: r_wfjt.json is not defined
 
+    # -------------------------------------------------------
+    # Check 2a — Fetch workflow nodes (requires WFJT ID)
+    # -------------------------------------------------------
     - name: Fetch workflow nodes for "Deploy Webapplication"
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/controller/v2/workflow_job_templates/{{ _wfjt_id }}/workflow_nodes/?page_size=20"
+        url: "{{ _api }}/workflow_job_templates/{{ _wfjt_id }}/workflow_nodes/?page_size=20"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 15
@@ -96,17 +104,60 @@
       register: r_nodes
       ignore_errors: true
       delegate_to: localhost
-      when: _wfjt_id | length > 0
+      when: _wfjt_id | string | length > 0
+
+    # -------------------------------------------------------
+    # Check 2b — Verify success_nodes link: Web Infra Deploy -> Web App Deploy
+    # Resolve the Web Infra Deploy node ID from the nodes list,
+    # then query its success_nodes endpoint.
+    # -------------------------------------------------------
+    - name: Set Web Infra Deploy node ID fact
+      ansible.builtin.set_fact:
+        _node_infra_id: >-
+          {{
+            r_nodes.json.results
+            | default([])
+            | selectattr('identifier', 'equalto', 'Web Infra Deploy')
+            | map(attribute='id')
+            | list
+            | first
+            | default('')
+          }}
+      when:
+        - r_nodes is not skipped
+        - r_nodes is not failed
+        - r_nodes.json is defined
+
+    - name: Default Web Infra Deploy node ID when nodes not fetched
+      ansible.builtin.set_fact:
+        _node_infra_id: ""
+      when: _node_infra_id is not defined
+
+    - name: Fetch success_nodes of Web Infra Deploy node
+      ansible.builtin.uri:
+        url: "{{ _api }}/workflow_job_template_nodes/{{ _node_infra_id }}/success_nodes/"
+        method: GET
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 15
+        status_code: [200]
+        return_content: true
+      register: r_success_nodes
+      ignore_errors: true
+      delegate_to: localhost
+      when: _node_infra_id | string | length > 0
 
     # -------------------------------------------------------
     # Check 3 — Most recent workflow job completed successfully
     # -------------------------------------------------------
-    - name: Fetch most recent workflow jobs for "Deploy Webapplication"
+    - name: Fetch most recent workflow job for "Deploy Webapplication"
       ansible.builtin.uri:
-        url: "{{ controller_url }}/api/controller/v2/workflow_job_templates/{{ _wfjt_id }}/workflow_jobs/?order_by=-id&page_size=1"
+        url: "{{ _api }}/workflow_job_templates/{{ _wfjt_id }}/workflow_jobs/?order_by=-id&page_size=1"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 15
@@ -115,19 +166,18 @@
       register: r_jobs
       ignore_errors: true
       delegate_to: localhost
-      when: _wfjt_id | length > 0
+      when: _wfjt_id | string | length > 0
 
     # -------------------------------------------------------
     # Check 4 — NodeJS app returns HTTP 200 with "Hello World"
-    # curl on bastion: node1 DNS resolves from bastion (lab private network)
+    # curl runs on bastion; node1 is reachable only from the lab private network
     # -------------------------------------------------------
     - name: Check NodeJS app returns Hello World on node1
       ansible.builtin.command:
-        cmd: "curl -sf --max-time 10 http://{{ node1_hostname }}/nodejs"
+        cmd: "curl -sf --max-time 10 http://node1/nodejs"
       register: r_nodejs
       ignore_errors: true
       changed_when: false
-      when: node1_hostname | default('') | length > 0
 
     # -------------------------------------------------------
     # Build task result facts
@@ -138,18 +188,32 @@
         _task2_ok: >-
           {{
             (r_nodes is not skipped and r_nodes is not failed)
-            and (r_nodes.json.results | default([]) | map(attribute='summary_fields') | map(attribute='unified_job_template') | map(attribute='name') | list is superset(['Web Infra Deploy', 'Web App Deploy']))
+            and (
+              r_nodes.json.results
+              | default([])
+              | map(attribute='identifier')
+              | list
+              | select('in', ['Web Infra Deploy', 'Web App Deploy'])
+              | list
+              | length == 2
+            )
+            and (r_success_nodes is defined and r_success_nodes is not skipped and r_success_nodes is not failed)
+            and ((r_success_nodes.json.count | default(0)) | int > 0)
           }}
         _task3_ok: >-
           {{
-            r_jobs is defined and r_jobs is not skipped and r_jobs is not failed
+            r_jobs is defined
+            and r_jobs is not skipped
+            and r_jobs is not failed
             and (r_jobs.json.results | default([]) | length > 0)
             and (r_jobs.json.results[0].status | default('')) == 'successful'
           }}
         _task4_ok: >-
           {{
-            r_nodejs is defined and r_nodejs is not skipped and r_nodejs is not failed
-            and r_nodejs.rc | default(1) == 0
+            r_nodejs is defined
+            and r_nodejs is not skipped
+            and r_nodejs is not failed
+            and (r_nodejs.rc | default(1)) == 0
             and 'hello world' in (r_nodejs.stdout | default('') | lower)
           }}
 
@@ -157,15 +221,15 @@
     # Validate all tasks
     # -------------------------------------------------------
     - name: Validate all tasks
-      validation_check:
+      rhpds.ftl.validation_check:
         check: "{{ _task1_ok and _task2_ok and _task3_ok and _task4_ok }}"
         pass_msg: |
-          Task 1: Workflow job template "Deploy Webapplication" exists in AAP
-          Task 2: Workflow has both required nodes — Web Infra Deploy and Web App Deploy (run on success)
+          Task 1: Workflow job template "Deploy Webapplication" exists in AAP org Default
+          Task 2: Workflow nodes correct — Web Infra Deploy and Web App Deploy linked (on_success)
           Task 3: Most recent "Deploy Webapplication" job completed successfully
-          Task 4: NodeJS app at http://{{ node1_hostname }}/nodejs returns HTTP 200 with Hello World
+          Task 4: NodeJS app at http://node1/nodejs returns HTTP 200 with Hello World
         error_msg: |
-          {{ 'Task 1: Workflow job template "Deploy Webapplication" exists in AAP' if _task1_ok else 'Task 1: FAILED — "Deploy Webapplication" workflow template not found in AAP — click Solve or create it under Automation Execution > Templates' }}
-          {{ 'Task 2: Workflow nodes correct (Web Infra Deploy + Web App Deploy)' if _task2_ok else 'Task 2: FAILED — workflow nodes missing or misconfigured — ensure Web Infra Deploy runs first and Web App Deploy is linked as Run on Success' }}
-          {{ 'Task 3: Most recent workflow job completed successfully' if _task3_ok else 'Task 3: FAILED — workflow job has not run or did not succeed — launch the "Deploy Webapplication" workflow and wait for it to finish' }}
-          {{ 'Task 4: NodeJS app returns HTTP 200 with Hello World' if _task4_ok else 'Task 4: FAILED — curl http://' + node1_hostname + '/nodejs did not return Hello World — ensure the workflow completed and the NodeJS service is running on node1' }}
+          {{ 'Task 1: Workflow JT "Deploy Webapplication" exists' if _task1_ok else 'Task 1: FAILED — "Deploy Webapplication" workflow template not found — create it under Automation Execution > Templates or click Solve' }}
+          {{ 'Task 2: Workflow nodes and on_success link are correct' if _task2_ok else 'Task 2: FAILED — workflow nodes missing or success edge not linked — ensure Web Infra Deploy is the start node and Web App Deploy is linked as Run on Success' }}
+          {{ 'Task 3: Most recent workflow job completed successfully' if _task3_ok else 'Task 3: FAILED — workflow has not run or did not succeed — launch "Deploy Webapplication" and wait for it to finish' }}
+          {{ 'Task 4: NodeJS app returns HTTP 200 with Hello World' if _task4_ok else 'Task 4: FAILED — curl http://node1/nodejs did not return Hello World — check that the workflow completed and the NodeJS service is running on node1' }}

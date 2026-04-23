@@ -2,85 +2,83 @@
 # Module 07 Solve — Secure the Automation Supply Chain
 #
 # What this playbook does:
-#   1. Ensures the git repository is cloned on the bastion host (idempotent)
-#   2. Configures global git user name / email
-#   3. Writes ~/gpg.txt (GPG batch key spec) — idempotent via stat guard
-#   4. Generates a GPG key pair for VerySecure <student@localhost> — idempotent
-#   5. Exports the public key to ~/signing_demo.asc — idempotent
-#   6. Installs ansible-sign via dnf (state: present — naturally idempotent)
-#   7. Writes MANIFEST.in into the project root — idempotent
-#   8. Runs ansible-sign project gpg-sign (idempotent: re-signs on every run,
-#      which is safe — the .sig file is simply overwritten)
-#   9. Stages, commits, and pushes .ansible-sign/ + MANIFEST.in to Gitea
-#  10. Slurps ~/signing_demo.asc into a variable for API calls
-#  11. Creates AAP GPG credential "ansible-sign-cred" (idempotent: skip if exists)
-#  12. Creates AAP SCM credential "gitea-cred" (idempotent: skip if exists)
-#  13. Creates AAP project "Signed Project" with signature validation (idempotent)
-#  14. Waits for the initial project sync to complete successfully
-#  15. Tampers with apache_install.yml (appends a comment line — idempotent guard)
-#  16. Commits and pushes the tampered file to Gitea
-#  17. Triggers a fresh project sync of "Signed Project"
-#  18. Waits for the sync job to complete (expects failure with Checksum mismatch)
-#  19. Reports all check results
 #
-# Variables injected at runtime (via AgV / user_data extravars):
-#   bastion_user        — bastion OS user (from bastion_ssh_user_name)
-#   bastion_password    — bastion SSH password
-#   bastion_host        — bastion SSH hostname
-#   bastion_port        — bastion SSH port
-#   gitea_url           — e.g. https://gitea-GUID.apps... (may not be in user_data)
-#   controller_url      — AAP controller base URL
-#   controller_username — AAP admin username
-#   controller_password — AAP admin password
-#   guid                — lab GUID
+#   Play 1 — localhost: Register bastion in in-memory inventory from env vars.
 #
-# Internal vars use _ prefix to avoid self-reference in vars: block
+#   Play 2 — bastion: GPG setup, ansible-sign, initial signed commit+push.
+#     1.  Clone playbooks-adv-controller repo (idempotent)
+#     2.  Configure git global user identity
+#     3.  Write ~/gpg.txt batch key spec (idempotent)
+#     4.  Generate GPG key pair for VerySecure <student@localhost> (idempotent)
+#     5.  Export GPG public key to ~/signing_demo.asc (idempotent)
+#     6.  Install ansible-sign via dnf (state: present — naturally idempotent)
+#     7.  Write MANIFEST.in to project root (idempotent)
+#     8.  Run ansible-sign project gpg-sign (re-sign is safe — overwrites .sig)
+#     9.  Stage, commit, and push .ansible-sign/ + MANIFEST.in to Gitea
+#
+#   Play 3 — localhost: Create AAP credentials, project, wait for initial sync.
+#    10.  Slurp ~/signing_demo.asc from bastion
+#    11.  Create AAP GPG credential "ansible-sign-cred" (idempotent)
+#    12.  Create AAP SCM credential "gitea-cred" (idempotent)
+#    13.  Create AAP project "Signed Project" with signature validation (idempotent)
+#    14.  Wait for initial project sync to succeed — must be SUCCESSFUL before tamper
+#
+#   Play 4 — bastion: Tamper with apache_install.yml and push (AFTER initial sync ok).
+#    15.  Append tamper comment to apache_install.yml (idempotent)
+#    16.  Commit and push the tampered file to Gitea
+#
+#   Play 5 — localhost: Trigger tamper re-sync, verify failure, final report.
+#    17.  Trigger re-sync of "Signed Project" (detects tamper)
+#    18.  Wait for tamper sync to complete (expect failure — Checksum mismatch)
+#    19.  Final verification checks + report
+#
+# All variables are resolved via lookup('ansible.builtin.env', 'VAR_NAME').
+# No bare extravars are used.
 
 # ---------------------------------------------------------------------------
-# Play 0: Register bastion in in-memory inventory
+# Play 1 — Register bastion in the in-memory inventory
 # ---------------------------------------------------------------------------
-- name: Module 07 Solve — Register bastion host
+- name: Module 07 Solve — build bastion inventory
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
   tasks:
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
-        ansible_host: "{{ bastion_host }}"
-        ansible_port: "{{ bastion_port }}"
-        ansible_user: "{{ bastion_user }}"
-        ansible_password: "{{ bastion_password }}"
+        groups: bastion
+        ansible_host: "{{ _ssh_host }}"
+        ansible_port: "{{ _ssh_port }}"
+        ansible_user: "{{ _ssh_user }}"
+        ansible_password: "{{ _ssh_pass }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: _ssh_host | length > 0
 
 # ---------------------------------------------------------------------------
-# Play 1: All solve steps on bastion (and AAP REST calls via uri)
+# Play 2 — GPG setup, ansible-sign, sign and push to Gitea
 # ---------------------------------------------------------------------------
-- name: Module 07 Solve — Secure the Automation Supply Chain
+- name: Module 07 Solve — GPG, ansible-sign, signed commit on bastion
   hosts: bastion
   gather_facts: false
   vars:
-    # Use underscore-prefixed vars to avoid self-reference recursion.
-    # All _xxx vars draw from known extravar names injected by jobs.py.
-    _user: "{{ bastion_user | default('lab-user') }}"
+    _user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _gitea_url: "{{ lookup('ansible.builtin.env', 'GITEA_URL') | regex_replace('/+$', '') }}"
+    _gitea_username: "{{ lookup('ansible.builtin.env', 'GITEA_USERNAME') }}"
+    _gitea_password: "{{ lookup('ansible.builtin.env', 'GITEA_PASSWORD') }}"
     _gitea_project: "playbooks-adv-controller"
-    _project_dir: "/home/{{ _user }}/{{ _gitea_project }}"
-    _gpg_txt: "/home/{{ _user }}/gpg.txt"
-    _signing_asc: "/home/{{ _user }}/signing_demo.asc"
-    # gitea_url comes from extravars if set; derive from guid if not
-    _gitea_url: "{{ gitea_url | default('https://gitea-' + (guid | default('')) + '.apps.ocpvdev01.rhdp.net') }}"
-    _gitea_username: "{{ gitea_username | default(bastion_user | default('lab-user')) }}"
-    _gitea_password: "{{ gitea_password | default(bastion_password | default('')) }}"
-    _ctrl_url: "{{ controller_url | default('') }}"
-    _ctrl_user: "{{ controller_username | default('') }}"
-    _ctrl_pass: "{{ controller_password | default('') }}"
-    # AAP 2.5 uses /api/controller/v2/ (not /api/v2/)
-    _aap_api: "{{ controller_url | default('') }}/api/controller/v2"
+    _project_dir: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/playbooks-adv-controller"
+    _gpg_txt: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/gpg.txt"
+    _signing_asc: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/signing_demo.asc"
 
   tasks:
 
     # -------------------------------------------------------------------------
-    # Step 1: Clone the repository if it does not already exist
+    # Step 1: Clone the repository (idempotent — skip if already present)
     # -------------------------------------------------------------------------
     - name: Check if project directory already exists
       ansible.builtin.stat:
@@ -99,12 +97,12 @@
     # -------------------------------------------------------------------------
     - name: Set git global user.name
       ansible.builtin.command:
-        cmd: git config --global user.name "Your Name"
+        cmd: git config --global user.name "Lab User"
       changed_when: false
 
     - name: Set git global user.email
       ansible.builtin.command:
-        cmd: git config --global user.email you@example.com
+        cmd: git config --global user.email lab-user@localhost
       changed_when: false
 
     # -------------------------------------------------------------------------
@@ -198,7 +196,7 @@
       when: not r_manifest.stat.exists
 
     # -------------------------------------------------------------------------
-    # Step 8: Sign the project with ansible-sign (re-sign is safe — overwrites .sig)
+    # Step 8: Sign the project with ansible-sign (re-sign is safe)
     # -------------------------------------------------------------------------
     - name: Run ansible-sign project gpg-sign
       ansible.builtin.shell: |
@@ -208,8 +206,8 @@
       ignore_errors: true
 
     # -------------------------------------------------------------------------
-    # Step 9: Stage .ansible-sign/ + MANIFEST.in and push to Gitea
-    # Uses credentials embedded in the remote URL for non-interactive push.
+    # Step 9: Configure Gitea remote URL with embedded credentials,
+    #         stage, commit, and push .ansible-sign/ + MANIFEST.in
     # -------------------------------------------------------------------------
     - name: Configure Gitea remote URL with embedded credentials
       ansible.builtin.shell: |
@@ -222,7 +220,6 @@
       ansible.builtin.shell: |
         cd {{ _project_dir }}
         git add .ansible-sign/ MANIFEST.in
-      register: r_git_add
       changed_when: false
       ignore_errors: true
 
@@ -238,17 +235,38 @@
       ansible.builtin.shell: |
         cd {{ _project_dir }}
         git push origin HEAD
-      register: r_git_push
       changed_when: false
       ignore_errors: true
 
+# ---------------------------------------------------------------------------
+# Play 3 — Create AAP credentials, project, and wait for initial sync
+#           MUST complete before the tamper is pushed (Play 4)
+# ---------------------------------------------------------------------------
+- name: Module 07 Solve — configure AAP credentials and project, wait for initial sync
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+    _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+    _gitea_url: "{{ lookup('ansible.builtin.env', 'GITEA_URL') | regex_replace('/+$', '') }}"
+    _gitea_username: "{{ lookup('ansible.builtin.env', 'GITEA_USERNAME') }}"
+    _gitea_password: "{{ lookup('ansible.builtin.env', 'GITEA_PASSWORD') }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _aap_api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/+$', '') }}/api/controller/v2"
+    _gitea_project: "playbooks-adv-controller"
+    _signing_asc: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/signing_demo.asc"
+
+  tasks:
+
     # -------------------------------------------------------------------------
-    # Step 10: Slurp signing_demo.asc for use in AAP API calls
+    # Step 10: Slurp signing_demo.asc from bastion for AAP credential body
     # -------------------------------------------------------------------------
-    - name: Read signing_demo.asc content
+    - name: Read signing_demo.asc from bastion
       ansible.builtin.slurp:
         src: "{{ _signing_asc }}"
       register: r_signing_asc
+      delegate_to: bastion
       ignore_errors: true
 
     - name: Set GPG public key fact
@@ -258,14 +276,13 @@
 
     # -------------------------------------------------------------------------
     # Step 11: Create AAP GPG credential "ansible-sign-cred" (idempotent)
-    # Credential type: GPG Public Key (type ID = numeric; query first)
     # -------------------------------------------------------------------------
     - name: Get GPG Public Key credential type ID
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credential_types/?name=GPG+Public+Key"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -273,7 +290,6 @@
         return_content: true
       register: r_gpg_cred_type
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set GPG credential type ID fact
       ansible.builtin.set_fact:
@@ -286,8 +302,8 @@
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credentials/?name=ansible-sign-cred"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -295,14 +311,13 @@
         return_content: true
       register: r_cred_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Create GPG credential "ansible-sign-cred"
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credentials/"
         method: POST
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         body_format: json
@@ -314,6 +329,7 @@
             gpg_public_key: "{{ _gpg_pub_key }}"
         timeout: 30
         status_code: [200, 201]
+        return_content: true
       when:
         - _gpg_cred_type_id is defined
         - _gpg_pub_key is defined
@@ -321,7 +337,6 @@
         - r_cred_check.json.count | int == 0
       register: r_cred_create
       ignore_errors: true
-      delegate_to: localhost
 
     # -------------------------------------------------------------------------
     # Step 12: Create AAP SCM credential "gitea-cred" (idempotent)
@@ -330,8 +345,8 @@
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credential_types/?name=Source+Control"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -339,7 +354,6 @@
         return_content: true
       register: r_scm_cred_type
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set SCM credential type ID fact
       ansible.builtin.set_fact:
@@ -352,8 +366,8 @@
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credentials/?name=gitea-cred"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -361,14 +375,13 @@
         return_content: true
       register: r_gitea_cred_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Create SCM credential "gitea-cred"
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credentials/"
         method: POST
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         body_format: json
@@ -381,24 +394,24 @@
             password: "{{ _gitea_password }}"
         timeout: 30
         status_code: [200, 201]
+        return_content: true
       when:
         - _scm_cred_type_id is defined
         - r_gitea_cred_check.json is defined
         - r_gitea_cred_check.json.count | int == 0
       register: r_gitea_cred_create
       ignore_errors: true
-      delegate_to: localhost
 
     # -------------------------------------------------------------------------
-    # Step 13: Create AAP project "Signed Project" with signature validation
-    # Gather credential IDs first (may have just been created above)
+    # Step 13: Create AAP project "Signed Project" with signature validation.
+    #          Re-fetch credential IDs (may have just been created above).
     # -------------------------------------------------------------------------
     - name: Fetch ansible-sign-cred ID
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credentials/?name=ansible-sign-cred"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -406,7 +419,6 @@
         return_content: true
       register: r_asc_cred
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set ansible-sign-cred ID fact
       ansible.builtin.set_fact:
@@ -419,8 +431,8 @@
       ansible.builtin.uri:
         url: "{{ _aap_api }}/credentials/?name=gitea-cred"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -428,7 +440,6 @@
         return_content: true
       register: r_gitea_cred
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set gitea-cred ID fact
       ansible.builtin.set_fact:
@@ -441,8 +452,8 @@
       ansible.builtin.uri:
         url: "{{ _aap_api }}/projects/?name=Signed+Project"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -450,14 +461,13 @@
         return_content: true
       register: r_proj_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Create project "Signed Project" with signature validation
       ansible.builtin.uri:
         url: "{{ _aap_api }}/projects/"
         method: POST
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         body_format: json
@@ -470,6 +480,7 @@
           signature_validation_credential: "{{ _asc_cred_id | int }}"
         timeout: 30
         status_code: [200, 201]
+        return_content: true
       when:
         - _asc_cred_id is defined
         - _gitea_cred_id is defined
@@ -477,19 +488,18 @@
         - r_proj_check.json.count | int == 0
       register: r_proj_create
       ignore_errors: true
-      delegate_to: localhost
 
     # -------------------------------------------------------------------------
-    # Step 14: Wait for the initial project sync to succeed
-    # Creating a project triggers an automatic first sync in AAP.
-    # Poll the project status until it reaches "successful" or 120 s timeout.
+    # Step 14: Fetch project ID and wait for initial sync to succeed.
+    #          AAP auto-triggers a sync when a project is created.
+    #          This poll MUST complete before the tamper is pushed (Play 4).
     # -------------------------------------------------------------------------
-    - name: Fetch "Signed Project" current status
+    - name: Fetch "Signed Project" status — poll until terminal state
       ansible.builtin.uri:
         url: "{{ _aap_api }}/projects/?name=Signed+Project"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -503,7 +513,6 @@
       retries: 24
       delay: 5
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set initial sync status fact
       ansible.builtin.set_fact:
@@ -520,6 +529,19 @@
       when:
         - r_proj_status.json is defined
         - r_proj_status.json.results | length > 0
+
+# ---------------------------------------------------------------------------
+# Play 4 — Tamper with apache_install.yml and push (AFTER initial sync ok)
+# ---------------------------------------------------------------------------
+- name: Module 07 Solve — tamper apache_install.yml on bastion and push
+  hosts: bastion
+  gather_facts: false
+  vars:
+    _user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _gitea_project: "playbooks-adv-controller"
+    _project_dir: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/playbooks-adv-controller"
+
+  tasks:
 
     # -------------------------------------------------------------------------
     # Step 15: Tamper with apache_install.yml (append a comment — idempotent)
@@ -564,15 +586,32 @@
       changed_when: false
       ignore_errors: true
 
+# ---------------------------------------------------------------------------
+# Play 5 — Trigger tamper re-sync, verify failure, final report
+# ---------------------------------------------------------------------------
+- name: Module 07 Solve — trigger tamper sync, verify checks, report
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+    _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _aap_api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/+$', '') }}/api/controller/v2"
+    _signing_asc: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/signing_demo.asc"
+    _project_dir_path: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/playbooks-adv-controller"
+
+  tasks:
+
     # -------------------------------------------------------------------------
     # Step 17: Trigger a fresh sync of "Signed Project" to detect the tamper
     # -------------------------------------------------------------------------
-    - name: Trigger "Signed Project" sync
+    - name: Trigger "Signed Project" re-sync (tamper detection)
       ansible.builtin.uri:
-        url: "{{ _aap_api }}/projects/{{ _project_id }}/update/"
+        url: "{{ _aap_api }}/projects/{{ _project_id | default('') }}/update/"
         method: POST
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -580,17 +619,16 @@
       when: _project_id is defined
       register: r_sync_trigger
       ignore_errors: true
-      delegate_to: localhost
 
     # -------------------------------------------------------------------------
-    # Step 18: Wait for the tamper sync to complete (expect failure)
+    # Step 18: Wait for tamper sync to complete (expect failure)
     # -------------------------------------------------------------------------
-    - name: Wait for "Signed Project" sync to finish
+    - name: Wait for "Signed Project" tamper sync to finish
       ansible.builtin.uri:
         url: "{{ _aap_api }}/projects/{{ _project_id }}/"
         method: GET
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -604,7 +642,6 @@
       delay: 5
       when: _project_id is defined
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set tamper sync failed fact
       ansible.builtin.set_fact:
@@ -616,14 +653,15 @@
       when: _project_id is defined
 
     # -------------------------------------------------------------------------
-    # Verification checks for the final report
+    # Verification checks — bastion-side
     # -------------------------------------------------------------------------
-    - name: Verify VerySecure GPG key exists in keyring
+    - name: Verify VerySecure GPG key exists in bastion keyring
       ansible.builtin.shell: |
         gpg --list-keys 2>/dev/null | grep -q 'VerySecure' && echo exists || echo missing
       register: r_gpg_verify
       changed_when: false
       ignore_errors: true
+      delegate_to: bastion
 
     - name: Set GPG key exists fact
       ansible.builtin.set_fact:
@@ -637,88 +675,155 @@
       register: r_asc_verify
       changed_when: false
       ignore_errors: true
+      delegate_to: bastion
 
-    - name: Set signing_demo.asc exists fact
+    - name: Set signing_demo.asc valid fact
       ansible.builtin.set_fact:
         _asc_ok: "{{ (r_asc_verify.stdout | trim) == 'ok' }}"
 
-    - name: Verify ansible-sign is installed
+    - name: Verify ansible-sign is installed on bastion
       ansible.builtin.shell: |
         rpm -q ansible-sign > /dev/null 2>&1 && echo installed || echo missing
       register: r_ansiblesign_verify
       changed_when: false
       ignore_errors: true
+      delegate_to: bastion
 
     - name: Set ansible-sign installed fact
       ansible.builtin.set_fact:
         _ansiblesign_ok: "{{ (r_ansiblesign_verify.stdout | trim) == 'installed' }}"
 
-    - name: Verify MANIFEST.in exists in project root
+    - name: Verify MANIFEST.in exists in project root on bastion
       ansible.builtin.stat:
-        path: "{{ _project_dir }}/MANIFEST.in"
+        path: "{{ _project_dir_path }}/MANIFEST.in"
       register: r_manifest_verify
+      delegate_to: bastion
 
     - name: Set MANIFEST.in exists fact
       ansible.builtin.set_fact:
         _manifest_ok: "{{ r_manifest_verify.stat.exists }}"
 
-    - name: Verify .ansible-sign/sha256sum.txt exists
+    - name: Verify .ansible-sign/sha256sum.txt exists on bastion
       ansible.builtin.stat:
-        path: "{{ _project_dir }}/.ansible-sign/sha256sum.txt"
+        path: "{{ _project_dir_path }}/.ansible-sign/sha256sum.txt"
       register: r_sha256_verify
+      delegate_to: bastion
 
     - name: Set sha256sum.txt exists fact
       ansible.builtin.set_fact:
         _sha256_ok: "{{ r_sha256_verify.stat.exists }}"
 
-    - name: Verify .ansible-sign/sha256sum.txt.sig exists
+    - name: Verify .ansible-sign/sha256sum.txt.sig exists on bastion
       ansible.builtin.stat:
-        path: "{{ _project_dir }}/.ansible-sign/sha256sum.txt.sig"
+        path: "{{ _project_dir_path }}/.ansible-sign/sha256sum.txt.sig"
       register: r_sig_verify
+      delegate_to: bastion
 
     - name: Set sha256sum.txt.sig exists fact
       ansible.builtin.set_fact:
         _sig_ok: "{{ r_sig_verify.stat.exists }}"
 
-    - name: Verify signed commit is in Gitea (contains .ansible-sign path)
+    - name: Verify signed commit is present in git log
       ansible.builtin.shell: |
-        cd {{ _project_dir }}
+        cd {{ _project_dir_path }}
         git log --oneline --name-only --diff-filter=A HEAD~5..HEAD 2>/dev/null \
           | grep -q '\.ansible-sign' && echo pushed || echo missing
       register: r_git_pushed_verify
       changed_when: false
       ignore_errors: true
+      delegate_to: bastion
 
     - name: Set signed commit pushed fact
       ansible.builtin.set_fact:
         _git_signed_pushed_ok: "{{ (r_git_pushed_verify.stdout | trim) == 'pushed' }}"
 
-    - name: Verify tamper commit is in Gitea (apache_install.yml changed)
+    - name: Verify tamper commit is present in git log
       ansible.builtin.shell: |
-        cd {{ _project_dir }}
+        cd {{ _project_dir_path }}
         git log --oneline HEAD~3..HEAD 2>/dev/null \
           | grep -q 'Changing file' && echo pushed || echo missing
       register: r_tamper_pushed_verify
       changed_when: false
       ignore_errors: true
+      delegate_to: bastion
 
     - name: Set tamper commit pushed fact
       ansible.builtin.set_fact:
         _tamper_pushed_ok: "{{ (r_tamper_pushed_verify.stdout | trim) == 'pushed' }}"
 
     # -------------------------------------------------------------------------
-    # Report
+    # AAP credential and project existence checks
+    # -------------------------------------------------------------------------
+    - name: Check ansible-sign-cred exists in AAP
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/credentials/?name=ansible-sign-cred"
+        method: GET
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_asc_cred_final
+      ignore_errors: true
+
+    - name: Set ansible-sign-cred final check fact
+      ansible.builtin.set_fact:
+        _asc_cred_ok: "{{ (r_asc_cred_final.json.count | default(0)) | int > 0 }}"
+
+    - name: Check gitea-cred exists in AAP
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/credentials/?name=gitea-cred"
+        method: GET
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_gitea_cred_final
+      ignore_errors: true
+
+    - name: Set gitea-cred final check fact
+      ansible.builtin.set_fact:
+        _gitea_cred_ok: "{{ (r_gitea_cred_final.json.count | default(0)) | int > 0 }}"
+
+    - name: Check "Signed Project" exists in AAP
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/projects/?name=Signed+Project"
+        method: GET
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_proj_final
+      ignore_errors: true
+
+    - name: Set Signed Project final check fact
+      ansible.builtin.set_fact:
+        _proj_ok: "{{ (r_proj_final.json.count | default(0)) | int > 0 }}"
+
+    # -------------------------------------------------------------------------
+    # Step 19: Final report
     # -------------------------------------------------------------------------
     - name: Report solve status
       ansible.builtin.debug:
         msg: |
-          GPG key VerySecure <student@localhost> in keyring:   {{ 'ok' if _gpg_key_ok else 'NOT ok' }}
-          ~/signing_demo.asc exists with PGP PUBLIC KEY BLOCK: {{ 'ok' if _asc_ok else 'NOT ok' }}
-          ansible-sign installed:                               {{ 'ok' if _ansiblesign_ok else 'NOT ok' }}
-          MANIFEST.in in project root:                          {{ 'ok' if _manifest_ok else 'NOT ok' }}
-          .ansible-sign/sha256sum.txt exists:                   {{ 'ok' if _sha256_ok else 'NOT ok' }}
-          .ansible-sign/sha256sum.txt.sig exists:               {{ 'ok' if _sig_ok else 'NOT ok' }}
-          signed commit pushed to Gitea:                        {{ 'ok' if _git_signed_pushed_ok else 'NOT ok' }}
-          initial project sync succeeded:                       {{ 'ok' if _initial_sync_ok else 'NOT ok' }}
-          tamper commit pushed to Gitea:                        {{ 'ok' if _tamper_pushed_ok else 'NOT ok' }}
+          GPG key VerySecure <student@localhost> in keyring:    {{ 'ok' if _gpg_key_ok | default(false) else 'NOT ok' }}
+          ~/signing_demo.asc exists with PGP PUBLIC KEY BLOCK: {{ 'ok' if _asc_ok | default(false) else 'NOT ok' }}
+          ansible-sign installed on bastion:                    {{ 'ok' if _ansiblesign_ok | default(false) else 'NOT ok' }}
+          MANIFEST.in in project root:                          {{ 'ok' if _manifest_ok | default(false) else 'NOT ok' }}
+          .ansible-sign/sha256sum.txt exists:                   {{ 'ok' if _sha256_ok | default(false) else 'NOT ok' }}
+          .ansible-sign/sha256sum.txt.sig exists:               {{ 'ok' if _sig_ok | default(false) else 'NOT ok' }}
+          signed commit pushed to Gitea:                        {{ 'ok' if _git_signed_pushed_ok | default(false) else 'NOT ok' }}
+          tamper commit pushed to Gitea:                        {{ 'ok' if _tamper_pushed_ok | default(false) else 'NOT ok' }}
+          AAP credential ansible-sign-cred exists:              {{ 'ok' if _asc_cred_ok | default(false) else 'NOT ok' }}
+          AAP credential gitea-cred exists:                     {{ 'ok' if _gitea_cred_ok | default(false) else 'NOT ok' }}
+          AAP project "Signed Project" exists:                  {{ 'ok' if _proj_ok | default(false) else 'NOT ok' }}
+          initial project sync succeeded:                       {{ 'ok' if _initial_sync_ok | default(false) else 'NOT ok' }}
           tamper sync failed (Checksum mismatch expected):      {{ 'ok' if _tamper_sync_failed | default(false) else 'NOT ok (sync may still be running — validate again)' }}

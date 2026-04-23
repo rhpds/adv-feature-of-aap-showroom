@@ -1,118 +1,121 @@
 ---
-# module-04 — Use surveys and RBAC to give users self-service access
+# Module 04 Solve — Surveys and RBAC
 #
 # What this playbook does:
-#   prose-01: Run add-workflow-template.yml on bastion if "Deploy Webapplication" WFJT missing
-#   prose-02: Look up the "Deploy Webapplication" WFJT ID (needed for all subsequent API calls)
-#   prose-03: POST survey_spec to WFJT + PATCH survey_enabled=true
-#   prose-04: Launch the workflow with survey extra_var content="Automated solve run"
-#   prose-05: (skip) — visual review of built-in roles
-#   prose-06: POST /api/controller/v2/role_definitions/ — create "WorkflowNightShifter" custom role
-#   prose-07: POST /api/controller/v2/users/ — create user "nightshift"
-#   prose-08: POST /api/controller/v2/teams/ — create team "NightShifters" + add nightshift user
-#   prose-09: POST /api/controller/v2/role_team_assignments/ — assign WorkflowNightShifter to NightShifters scoped to WFJT
-#   prose-10: (skip) — test as restricted user (interactive UI login)
-#   prose-11: (skip) — conclusion
+#   prose-00: Run add-workflow-template.yml on bastion if "Deploy Webapplication" WFJT missing
+#   prose-01: POST survey_spec (var=content, type=text) to WFJT; PATCH survey_enabled=true
+#   prose-02: Launch WFJT with extra_vars content="FTL_SOLVE_MODULE04"; poll until successful
+#   prose-03: Create custom role "WorkflowNightShifter" (approve/execute/view on WFJT)
+#   prose-04: Create user "nightshift" (Normal user, org Default)
+#   prose-05: Create team "NightShifters" in org Default; add nightshift user to team
+#   prose-06: Assign WorkflowNightShifter role to NightShifters scoped to Deploy Webapplication
+#   prose-07: Verify nightshift sees exactly 1 WFJT; launch WFJT as nightshift with
+#             content="FTL_SOLVE_MODULE04_NIGHT"; poll until successful
+#   block-01/02: curl http://node1/nodejs on bastion; verify response contains FTL_SOLVE_MODULE04
 #
-# Notes:
-#   - AAP 2.5 unified gateway: REST API base is /api/controller/v2/ (not /api/v2/)
-#   - Custom roles: endpoint is /api/controller/v2/role_definitions/ (underscore)
-#   - content_type: "awx.workflowjobtemplate" (not "shared.workflowjobtemplate")
-#   - permissions: "awx.approve_workflowjobtemplate" etc (not "shared." prefix)
-#   - role_team_assignments POST body: team, role_definition, object_id (no content_type field)
-#   - Controller REST calls are delegated to localhost (runner can reach controller HTTPS)
-#   - NodeJS check uses curl via ansible.builtin.command on bastion (node1 DNS resolves there)
+# All variables resolved via lookup('ansible.builtin.env', 'VAR_NAME').
+# AAP 2.5 REST:
+#   Controller resources (WFJT, users, teams, jobs): /api/controller/v2/
+#   Custom roles (role_definitions, assignments):    /api/controller/v2/
+# NodeJS check: curl delegated to bastion (node1 DNS resolves there, not in runner).
 
 # -------------------------------------------------------------------------
-# Play 1 — Build dynamic bastion inventory from extravars
+# Play 1 — Build dynamic bastion inventory from environment variables
 # -------------------------------------------------------------------------
 - name: Build bastion inventory
   hosts: localhost
+  connection: local
   gather_facts: false
+  vars:
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
+
   tasks:
+
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
         groups: bastion
-        ansible_host: "{{ bastion_host }}"
-        ansible_port: "{{ bastion_port | default(22) }}"
-        ansible_user: "{{ bastion_user | default('lab-user') }}"
-        ansible_password: "{{ bastion_password | default('') }}"
-        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_host: "{{ _ssh_host }}"
+        ansible_port: "{{ _ssh_port | int }}"
+        ansible_user: "{{ _ssh_user }}"
+        ansible_password: "{{ _ssh_pass }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: bastion_host | default('') | length > 0
+      when: _ssh_host | length > 0
 
 # -------------------------------------------------------------------------
-# Play 2 — Create surveys, roles, users, teams, RBAC assignments
-# All AAP REST calls delegated to localhost (runner reaches controller HTTPS)
-# NodeJS check runs via ansible.builtin.command on bastion (node1 DNS resolves there)
+# Play 2 — Surveys, RBAC, launch workflow, verify NodeJS
+# AAP REST calls delegated to localhost (runner reaches controller HTTPS).
+# NodeJS curl check runs on bastion (node1 DNS resolves there).
 # -------------------------------------------------------------------------
 - name: Module 04 Solve — Surveys and RBAC
   hosts: bastion
   gather_facts: false
   vars:
-    controller_url: "{{ controller_url | default('') }}"
-    controller_username: "{{ controller_username | default('admin') }}"
-    controller_password: "{{ controller_password | default('') }}"
-    node1_hostname: "{{ node1_hostname | default('node1') }}"
-    _api: "{{ controller_url }}/api/controller/v2"
-    wfjt_name: "Deploy Webapplication"
-    nightshift_user: "nightshift"
-    nightshift_team: "NightShifters"
-    nightshift_role: "WorkflowNightShifter"
-    survey_content_value: "Automated solve run"
+    _ctrl_url:  "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
+    _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+    _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+    _ssh_user:  "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}/api/controller/v2"
+    wfjt_name:            "Deploy Webapplication"
+    nightshift_username:  "nightshift"
+    nightshift_team_name: "NightShifters"
+    nightshift_role_name: "WorkflowNightShifter"
+    survey_content_admin: "FTL_SOLVE_MODULE04"
+    survey_content_night: "FTL_SOLVE_MODULE04_NIGHT"
 
   tasks:
 
     # -------------------------------------------------------------------------
-    # prose-01: Prerequisite — ensure "Deploy Webapplication" WFJT exists.
-    # Run the setup playbook on bastion only when the WFJT is missing.
+    # prose-00: Ensure "Deploy Webapplication" WFJT exists (prerequisite guard)
+    # Run add-workflow-template.yml on bastion only when the WFJT is absent.
     # -------------------------------------------------------------------------
     - name: Check if "Deploy Webapplication" WFJT exists
       ansible.builtin.uri:
         url: "{{ _api }}/workflow_job_templates/?name=Deploy+Webapplication"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         status_code: [200]
         return_content: true
-      register: r_wfjt_check
+      register: r_wfjt_prereq
       ignore_errors: true
       delegate_to: localhost
 
-    - name: Run add-workflow-template.yml prerequisite if WFJT is missing
-      ansible.builtin.shell: >
-        cd ~/playbooks-adv-controller &&
-        ansible-navigator run add-workflow-template.yml
-        --mode stdout
-        --pp missing
+    - name: Run add-workflow-template.yml on bastion if WFJT is missing
+      ansible.builtin.shell: |
+        cd ~/playbooks-adv-controller
+        ansible-navigator run add-workflow-template.yml \
+          --mode stdout \
+          --pull-policy missing 2>&1
       register: r_prereq
       changed_when: r_prereq.rc == 0
       ignore_errors: true
       when: >
-        r_wfjt_check.json is not defined
-        or r_wfjt_check.json.count | default(0) | int == 0
+        r_wfjt_prereq.json is not defined
+        or r_wfjt_prereq.json.count | default(0) | int == 0
 
     - name: Wait for WFJT to be ready after prerequisite run
       ansible.builtin.pause:
         seconds: 10
       when: >
-        r_wfjt_check.json is not defined
-        or r_wfjt_check.json.count | default(0) | int == 0
+        r_wfjt_prereq.json is not defined
+        or r_wfjt_prereq.json.count | default(0) | int == 0
 
     # -------------------------------------------------------------------------
-    # prose-02: Look up "Deploy Webapplication" WFJT ID
-    # All subsequent API calls require this ID.
+    # Look up "Deploy Webapplication" WFJT ID (required for all subsequent calls)
     # -------------------------------------------------------------------------
     - name: Get "Deploy Webapplication" WFJT details
       ansible.builtin.uri:
         url: "{{ _api }}/workflow_job_templates/?name=Deploy+Webapplication"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -122,30 +125,36 @@
       ignore_errors: true
       delegate_to: localhost
 
-    - name: Set WFJT ID fact
+    - name: Set WFJT ID and existence facts
       ansible.builtin.set_fact:
-        wfjt_id: "{{ r_wfjt.json.results[0].id | default('') }}"
+        wfjt_id:  "{{ r_wfjt.json.results[0].id | default('') }}"
         _wfjt_ok: "{{ r_wfjt.json.count | default(0) | int > 0 }}"
       when: r_wfjt.json is defined
 
-    - name: Warn if WFJT not found
+    - name: Default WFJT facts when lookup failed
+      ansible.builtin.set_fact:
+        wfjt_id:  ""
+        _wfjt_ok: false
+      when: wfjt_id is not defined
+
+    - name: Warn if WFJT not found after prerequisite run
       ansible.builtin.debug:
         msg: >
           WARNING: "Deploy Webapplication" WFJT not found after prerequisite run.
           Remaining tasks will be skipped. Check ansible-navigator logs on bastion.
-      when: not (_wfjt_ok | default(false))
+      when: not (_wfjt_ok | default(false) | bool)
 
     # -------------------------------------------------------------------------
-    # prose-03a: POST survey_spec to WFJT
+    # prose-01a: POST survey_spec to WFJT
     # POST /api/controller/v2/workflow_job_templates/{id}/survey_spec/
-    # Idempotent: the API replaces the full spec on each POST.
+    # Full spec replacement on each POST — inherently idempotent.
     # -------------------------------------------------------------------------
     - name: Create/replace survey spec on "Deploy Webapplication" WFJT
       ansible.builtin.uri:
         url: "{{ _api }}/workflow_job_templates/{{ wfjt_id }}/survey_spec/"
         method: POST
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -170,14 +179,14 @@
       when: wfjt_id | default('') | length > 0
 
     # -------------------------------------------------------------------------
-    # prose-03b: PATCH survey_enabled=true on the WFJT
+    # prose-01b: PATCH survey_enabled=true on the WFJT
     # -------------------------------------------------------------------------
     - name: Enable survey on "Deploy Webapplication" WFJT
       ansible.builtin.uri:
         url: "{{ _api }}/workflow_job_templates/{{ wfjt_id }}/"
         method: PATCH
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -200,103 +209,121 @@
           }}
       when: wfjt_id | default('') | length > 0
 
+    - name: Default survey fact when WFJT not found
+      ansible.builtin.set_fact:
+        _survey_ok: false
+      when: not (wfjt_id | default('') | length > 0)
+
     # -------------------------------------------------------------------------
-    # prose-04: Launch the workflow with survey extra_var content=<string>
+    # prose-02: Launch WFJT with content="FTL_SOLVE_MODULE04"; poll until successful
     # POST /api/controller/v2/workflow_job_templates/{id}/launch/
     # -------------------------------------------------------------------------
-    - name: Launch "Deploy Webapplication" workflow with survey content
+    - name: Launch "Deploy Webapplication" with content=FTL_SOLVE_MODULE04
       ansible.builtin.uri:
         url: "{{ _api }}/workflow_job_templates/{{ wfjt_id }}/launch/"
         method: POST
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         body_format: json
         body:
           extra_vars:
-            content: "{{ survey_content_value }}"
+            content: "{{ survey_content_admin }}"
         status_code: [200, 201]
         return_content: true
-      register: r_launch
+      register: r_launch_admin
       ignore_errors: true
       delegate_to: localhost
       when: wfjt_id | default('') | length > 0
 
-    - name: Set launch job ID fact
+    - name: Set admin launch facts
       ansible.builtin.set_fact:
-        _launch_job_id: "{{ r_launch.json.id | default('') }}"
-        _launch_ok: "{{ (r_launch.status | default(0)) in [200, 201] }}"
+        _admin_job_id: "{{ r_launch_admin.json.id | default('') }}"
+        _admin_launch_ok: "{{ (r_launch_admin.status | default(0)) in [200, 201] }}"
       when: wfjt_id | default('') | length > 0
 
-    # Wait for the workflow job to complete (up to 5 minutes)
-    - name: Wait for launched workflow job to finish
+    - name: Default admin launch facts when WFJT not found
+      ansible.builtin.set_fact:
+        _admin_job_id: ""
+        _admin_launch_ok: false
+      when: not (wfjt_id | default('') | length > 0)
+
+    - name: Poll admin workflow job until finished (max 5 min)
       ansible.builtin.uri:
-        url: "{{ _api }}/workflow_jobs/{{ _launch_job_id }}/"
+        url: "{{ _api }}/workflow_jobs/{{ _admin_job_id }}/"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         status_code: [200]
         return_content: true
-      register: r_job_status
+      register: r_admin_job_status
       ignore_errors: true
       retries: 30
       delay: 10
       until: >
-        r_job_status.json.status | default('') in ['successful', 'failed', 'error', 'canceled']
+        r_admin_job_status.json.status | default('') in
+        ['successful', 'failed', 'error', 'canceled']
       delegate_to: localhost
       when:
-        - wfjt_id | default('') | length > 0
-        - _launch_ok | default(false)
-        - _launch_job_id | default('') | length > 0
+        - _admin_launch_ok | default(false) | bool
+        - _admin_job_id | default('') | length > 0
 
-    - name: Set workflow job success fact
+    - name: Set admin workflow success fact
       ansible.builtin.set_fact:
-        _workflow_successful: >-
-          {{ (r_job_status.json.status | default('')) == 'successful' }}
+        _admin_workflow_ok: >-
+          {{ (r_admin_job_status.json.status | default('')) == 'successful' }}
       when:
-        - wfjt_id | default('') | length > 0
-        - _launch_ok | default(false)
+        - _admin_launch_ok | default(false) | bool
+        - _admin_job_id | default('') | length > 0
 
-    # Verify the NodeJS app returns HTTP 200 via curl on bastion
-    - name: Verify NodeJS app returns HTTP 200 via curl on bastion
+    - name: Default admin workflow fact when not launched
+      ansible.builtin.set_fact:
+        _admin_workflow_ok: false
+      when: _admin_workflow_ok is not defined
+
+    # -------------------------------------------------------------------------
+    # block-01/02: Verify http://node1/nodejs returns FTL_SOLVE_MODULE04
+    # curl executed on bastion (node1 DNS resolves there, not in runner container)
+    # -------------------------------------------------------------------------
+    - name: Verify NodeJS app content on bastion via curl
       ansible.builtin.command:
-        cmd: "curl -s -o /dev/null -w '%{http_code}' http://{{ node1_hostname }}/nodejs"
-      register: r_curl_code
+        cmd: "curl -sf --max-time 15 http://node1/nodejs"
+      register: r_nodejs_check
       ignore_errors: true
       changed_when: false
-      when:
-        - node1_hostname | default('') | length > 0
-        - _workflow_successful | default(false)
+      when: _admin_workflow_ok | default(false) | bool
 
     - name: Set NodeJS content check fact
       ansible.builtin.set_fact:
-        _nodejs_ok: >-
-          {{ (r_curl_code.stdout | default('')) == '200' }}
+        _nodejs_content_ok: >-
+          {{ survey_content_admin in (r_nodejs_check.stdout | default('')) }}
       when:
-        - node1_hostname | default('') | length > 0
-        - _workflow_successful | default(false)
+        - _admin_workflow_ok | default(false) | bool
+        - r_nodejs_check is not skipped
 
-    # prose-05: SKIP — visual review of built-in roles in AAP UI
-    # Not automatable: read-only UI inspection step.
+    - name: Default NodeJS content fact when workflow did not succeed
+      ansible.builtin.set_fact:
+        _nodejs_content_ok: false
+      when: _nodejs_content_ok is not defined
 
     # -------------------------------------------------------------------------
-    # prose-06: Create custom role "WorkflowNightShifter"
+    # prose-03: Create custom role "WorkflowNightShifter"
     # POST /api/controller/v2/role_definitions/
-    # content_type: "awx.workflowjobtemplate" (not "shared.workflowjobtemplate")
-    # permissions: "awx." prefix (not "shared." prefix)
-    # Idempotency: check if role already exists first.
+    # content_type: "awx.workflowjobtemplate"
+    # permissions: "awx." prefix  (awx.approve_*, awx.execute_*, awx.view_*)
+    # Idempotent: check first; create only when absent.
     # -------------------------------------------------------------------------
     - name: Check if custom role "WorkflowNightShifter" already exists
       ansible.builtin.uri:
         url: "{{ _api }}/role_definitions/?name=WorkflowNightShifter"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -310,15 +337,15 @@
       ansible.builtin.uri:
         url: "{{ _api }}/role_definitions/"
         method: POST
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         body_format: json
         body:
           name: "WorkflowNightShifter"
-          description: "Nightshift workflow"
+          description: "Nightshift workflow operator — approve, execute, view"
           content_type: "awx.workflowjobtemplate"
           permissions:
             - "awx.approve_workflowjobtemplate"
@@ -333,12 +360,12 @@
         r_role_check.json is not defined
         or r_role_check.json.count | default(0) | int == 0
 
-    - name: Get "WorkflowNightShifter" role ID (created or pre-existing)
+    - name: Look up "WorkflowNightShifter" role ID (created or pre-existing)
       ansible.builtin.uri:
         url: "{{ _api }}/role_definitions/?name=WorkflowNightShifter"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -348,23 +375,29 @@
       ignore_errors: true
       delegate_to: localhost
 
-    - name: Set role ID and status facts
+    - name: Set role ID and existence facts
       ansible.builtin.set_fact:
         nightshift_role_id: "{{ r_role_lookup.json.results[0].id | default('') }}"
         _role_ok: "{{ r_role_lookup.json.count | default(0) | int > 0 }}"
       when: r_role_lookup.json is defined
 
+    - name: Default role facts when lookup failed
+      ansible.builtin.set_fact:
+        nightshift_role_id: ""
+        _role_ok: false
+      when: nightshift_role_id is not defined
+
     # -------------------------------------------------------------------------
-    # prose-07: Create user "nightshift"
+    # prose-04: Create user "nightshift" (Normal user, org Default)
     # POST /api/controller/v2/users/
-    # Idempotency: check if user already exists first.
+    # Idempotent: check first; create only when absent.
     # -------------------------------------------------------------------------
     - name: Check if user "nightshift" already exists
       ansible.builtin.uri:
         url: "{{ _api }}/users/?username=nightshift"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -378,15 +411,15 @@
       ansible.builtin.uri:
         url: "{{ _api }}/users/"
         method: POST
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
         body_format: json
         body:
           username: "nightshift"
-          password: "{{ controller_password }}"
+          password: "{{ _ctrl_pass }}"
           first_name: "Night"
           last_name: "Shift"
           email: "nightshift@example.com"
@@ -401,12 +434,12 @@
         r_user_check.json is not defined
         or r_user_check.json.count | default(0) | int == 0
 
-    - name: Get "nightshift" user ID (created or pre-existing)
+    - name: Look up "nightshift" user ID (created or pre-existing)
       ansible.builtin.uri:
         url: "{{ _api }}/users/?username=nightshift"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -416,23 +449,29 @@
       ignore_errors: true
       delegate_to: localhost
 
-    - name: Set nightshift user ID and status facts
+    - name: Set nightshift user ID and existence facts
       ansible.builtin.set_fact:
         nightshift_user_id: "{{ r_user_lookup.json.results[0].id | default('') }}"
         _user_ok: "{{ r_user_lookup.json.count | default(0) | int > 0 }}"
       when: r_user_lookup.json is defined
 
+    - name: Default user facts when lookup failed
+      ansible.builtin.set_fact:
+        nightshift_user_id: ""
+        _user_ok: false
+      when: nightshift_user_id is not defined
+
     # -------------------------------------------------------------------------
-    # prose-08a: Create team "NightShifters" in org Default
+    # prose-05a: Create team "NightShifters" in org Default
     # POST /api/controller/v2/teams/
-    # Idempotency: check if team already exists first.
+    # Idempotent: check first; create only when absent.
     # -------------------------------------------------------------------------
     - name: Get "Default" organization ID
       ansible.builtin.uri:
         url: "{{ _api }}/organizations/?name=Default"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -445,14 +484,21 @@
     - name: Set Default org ID fact
       ansible.builtin.set_fact:
         default_org_id: "{{ r_org_lookup.json.results[0].id | default('') }}"
-      when: r_org_lookup.json is defined and r_org_lookup.json.count | default(0) | int > 0
+      when:
+        - r_org_lookup.json is defined
+        - r_org_lookup.json.count | default(0) | int > 0
+
+    - name: Default org ID when lookup failed
+      ansible.builtin.set_fact:
+        default_org_id: ""
+      when: default_org_id is not defined
 
     - name: Check if team "NightShifters" already exists
       ansible.builtin.uri:
         url: "{{ _api }}/teams/?name=NightShifters"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -462,12 +508,12 @@
       ignore_errors: true
       delegate_to: localhost
 
-    - name: Create team "NightShifters"
+    - name: Create team "NightShifters" in org Default
       ansible.builtin.uri:
         url: "{{ _api }}/teams/"
         method: POST
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -486,12 +532,12 @@
         and (r_team_check.json is not defined
              or r_team_check.json.count | default(0) | int == 0)
 
-    - name: Get "NightShifters" team ID (created or pre-existing)
+    - name: Look up "NightShifters" team ID (created or pre-existing)
       ansible.builtin.uri:
         url: "{{ _api }}/teams/?name=NightShifters"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -501,23 +547,31 @@
       ignore_errors: true
       delegate_to: localhost
 
-    - name: Set team ID and status facts
+    - name: Set team ID and existence facts
       ansible.builtin.set_fact:
         nightshift_team_id: "{{ r_team_lookup.json.results[0].id | default('') }}"
         _team_ok: "{{ r_team_lookup.json.count | default(0) | int > 0 }}"
       when: r_team_lookup.json is defined
 
+    - name: Default team facts when lookup failed
+      ansible.builtin.set_fact:
+        nightshift_team_id: ""
+        _team_ok: false
+      when: nightshift_team_id is not defined
+
     # -------------------------------------------------------------------------
-    # prose-08b: Add "nightshift" user to "NightShifters" team
+    # prose-05b: Add "nightshift" user to "NightShifters" team
     # POST /api/controller/v2/teams/{id}/users/
-    # Idempotency: check if user is already a member.
+    # curl used (uri body_format:json renders Jinja2 integers as JSON strings;
+    # AAP teams/users/ endpoint requires {"id": <integer>}).
+    # Idempotent: check membership first.
     # -------------------------------------------------------------------------
     - name: Check if "nightshift" is already in "NightShifters" team
       ansible.builtin.uri:
         url: "{{ _api }}/teams/{{ nightshift_team_id }}/users/?username=nightshift"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -531,14 +585,14 @@
         - nightshift_user_id | default('') | length > 0
 
     - name: Add "nightshift" user to "NightShifters" team
-      # Use shell with curl so the user ID is sent as a proper JSON integer.
-      # ansible.builtin.uri always quotes Jinja2-templated integers as strings in body dict.
       ansible.builtin.shell:
         cmd: |
-          curl -sk -u {{ controller_username }}:{{ controller_password }} \
-            -X POST -H "Content-Type: application/json" \
-            -d '{{"id": {{ nightshift_user_id }}}}' \
-            {{ _api }}/teams/{{ nightshift_team_id }}/users/
+          curl -sk \
+            -u "{{ _ctrl_user }}:{{ _ctrl_pass }}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"id": {{ nightshift_user_id }}}' \
+            "{{ _api }}/teams/{{ nightshift_team_id }}/users/"
       register: r_team_add_user
       ignore_errors: true
       changed_when: true
@@ -554,8 +608,8 @@
       ansible.builtin.uri:
         url: "{{ _api }}/teams/{{ nightshift_team_id }}/users/?username=nightshift"
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -574,20 +628,27 @@
         - nightshift_team_id | default('') | length > 0
         - r_team_member_verify.json is defined
 
+    - name: Default team membership fact when team not found
+      ansible.builtin.set_fact:
+        _team_member_ok: false
+      when: _team_member_ok is not defined
+
     # -------------------------------------------------------------------------
-    # prose-09: Assign WorkflowNightShifter role to NightShifters team
-    # scoped to the "Deploy Webapplication" WFJT
+    # prose-06: Assign WorkflowNightShifter role to NightShifters team
+    # scoped to "Deploy Webapplication" WFJT
     # POST /api/controller/v2/role_team_assignments/
-    # Body: team (id), role_definition (id), object_id (string of WFJT pk)
-    # No content_type field in POST body — derived from role_definition.
-    # Idempotency: check if assignment already exists.
+    # Body: team (id int), role_definition (id int), object_id (string of WFJT pk)
+    # Note: no content_type field in body — derived from role_definition.
+    # Idempotent: check assignment first; create only when absent.
+    # curl used to guarantee integer types in JSON body.
     # -------------------------------------------------------------------------
     - name: Check if role assignment already exists for NightShifters team
       ansible.builtin.uri:
-        url: "{{ _api }}/role_team_assignments/?team={{ nightshift_team_id }}&role_definition={{ nightshift_role_id }}&object_id={{ wfjt_id }}"
+        url: >-
+          {{ _api }}/role_team_assignments/?team={{ nightshift_team_id }}&role_definition={{ nightshift_role_id }}&object_id={{ wfjt_id }}
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -601,24 +662,18 @@
         - nightshift_role_id | default('') | length > 0
         - wfjt_id | default('') | length > 0
 
-    - name: Assign WorkflowNightShifter role to NightShifters team on "Deploy Webapplication"
-      ansible.builtin.uri:
-        url: "{{ _api }}/role_team_assignments/"
-        method: POST
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
-        force_basic_auth: true
-        validate_certs: false
-        timeout: 30
-        body_format: json
-        body:
-          team: "{{ nightshift_team_id | int }}"
-          role_definition: "{{ nightshift_role_id | int }}"
-          object_id: "{{ wfjt_id | string }}"
-        status_code: [200, 201]
-        return_content: true
+    - name: Assign WorkflowNightShifter role to NightShifters on "Deploy Webapplication"
+      ansible.builtin.shell:
+        cmd: |
+          curl -sk \
+            -u "{{ _ctrl_user }}:{{ _ctrl_pass }}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"team": {{ nightshift_team_id }}, "role_definition": {{ nightshift_role_id }}, "object_id": "{{ wfjt_id }}"}' \
+            "{{ _api }}/role_team_assignments/"
       register: r_assignment_create
       ignore_errors: true
+      changed_when: true
       delegate_to: localhost
       when:
         - nightshift_team_id | default('') | length > 0
@@ -630,10 +685,11 @@
 
     - name: Verify role assignment exists for NightShifters team
       ansible.builtin.uri:
-        url: "{{ _api }}/role_team_assignments/?team={{ nightshift_team_id }}&role_definition={{ nightshift_role_id }}&object_id={{ wfjt_id }}"
+        url: >-
+          {{ _api }}/role_team_assignments/?team={{ nightshift_team_id }}&role_definition={{ nightshift_role_id }}&object_id={{ wfjt_id }}
         method: GET
-        url_username: "{{ controller_username }}"
-        url_password: "{{ controller_password }}"
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 30
@@ -655,8 +711,126 @@
         - nightshift_team_id | default('') | length > 0
         - r_assignment_verify.json is defined
 
-    # prose-10: SKIP — test login as nightshift user (interactive UI step)
-    # prose-11: SKIP — conclusion (read-only, no automation target)
+    - name: Default role assignment fact when prerequisites missing
+      ansible.builtin.set_fact:
+        _role_assignment_ok: false
+      when: _role_assignment_ok is not defined
+
+    # -------------------------------------------------------------------------
+    # prose-07a: Verify nightshift sees exactly 1 WFJT ("Deploy Webapplication")
+    # GET /api/controller/v2/workflow_job_templates/ as nightshift user
+    # Expected: count == 1, results[0].name == "Deploy Webapplication"
+    # -------------------------------------------------------------------------
+    - name: Check WFJTs visible to "nightshift" user
+      ansible.builtin.uri:
+        url: "{{ _api }}/workflow_job_templates/"
+        method: GET
+        url_username: "nightshift"
+        url_password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_nightshift_wfjts
+      ignore_errors: true
+      delegate_to: localhost
+      when:
+        - _user_ok | default(false) | bool
+        - _role_assignment_ok | default(false) | bool
+
+    - name: Set nightshift WFJT visibility fact
+      ansible.builtin.set_fact:
+        _nightshift_sees_1_wfjt: >-
+          {{
+            r_nightshift_wfjts.json.count | default(0) | int == 1
+            and (r_nightshift_wfjts.json.results | default([]) | map(attribute='name') | list | first | default('')) == 'Deploy Webapplication'
+          }}
+      when:
+        - r_nightshift_wfjts is not skipped
+        - r_nightshift_wfjts.json is defined
+
+    - name: Default nightshift WFJT visibility fact when prereqs not met
+      ansible.builtin.set_fact:
+        _nightshift_sees_1_wfjt: false
+      when: _nightshift_sees_1_wfjt is not defined
+
+    # -------------------------------------------------------------------------
+    # prose-07b: Launch WFJT as nightshift with content="FTL_SOLVE_MODULE04_NIGHT"
+    # POST /api/controller/v2/workflow_job_templates/{id}/launch/ as nightshift
+    # Poll until successful.
+    # -------------------------------------------------------------------------
+    - name: Launch "Deploy Webapplication" as nightshift with FTL_SOLVE_MODULE04_NIGHT
+      ansible.builtin.uri:
+        url: "{{ _api }}/workflow_job_templates/{{ wfjt_id }}/launch/"
+        method: POST
+        url_username: "nightshift"
+        url_password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          extra_vars:
+            content: "{{ survey_content_night }}"
+        status_code: [200, 201]
+        return_content: true
+      register: r_launch_night
+      ignore_errors: true
+      delegate_to: localhost
+      when:
+        - wfjt_id | default('') | length > 0
+        - _nightshift_sees_1_wfjt | default(false) | bool
+
+    - name: Set nightshift launch facts
+      ansible.builtin.set_fact:
+        _night_job_id:    "{{ r_launch_night.json.id | default('') }}"
+        _night_launch_ok: "{{ (r_launch_night.status | default(0)) in [200, 201] }}"
+      when:
+        - wfjt_id | default('') | length > 0
+        - _nightshift_sees_1_wfjt | default(false) | bool
+
+    - name: Default nightshift launch facts when skipped
+      ansible.builtin.set_fact:
+        _night_job_id:    ""
+        _night_launch_ok: false
+      when: _night_job_id is not defined
+
+    - name: Poll nightshift workflow job until finished (max 5 min)
+      ansible.builtin.uri:
+        url: "{{ _api }}/workflow_jobs/{{ _night_job_id }}/"
+        method: GET
+        url_username: "{{ _ctrl_user }}"
+        url_password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+        return_content: true
+      register: r_night_job_status
+      ignore_errors: true
+      retries: 30
+      delay: 10
+      until: >
+        r_night_job_status.json.status | default('') in
+        ['successful', 'failed', 'error', 'canceled']
+      delegate_to: localhost
+      when:
+        - _night_launch_ok | default(false) | bool
+        - _night_job_id | default('') | length > 0
+
+    - name: Set nightshift workflow success fact
+      ansible.builtin.set_fact:
+        _night_workflow_ok: >-
+          {{ (r_night_job_status.json.status | default('')) == 'successful' }}
+      when:
+        - _night_launch_ok | default(false) | bool
+        - _night_job_id | default('') | length > 0
+
+    - name: Default nightshift workflow fact when not launched
+      ansible.builtin.set_fact:
+        _night_workflow_ok: false
+      when: _night_workflow_ok is not defined
 
     # -------------------------------------------------------------------------
     # Report solve status
@@ -664,13 +838,14 @@
     - name: Report solve status
       ansible.builtin.debug:
         msg: |
-          "Deploy Webapplication" WFJT exists:              {{ 'ok' if (_wfjt_ok | default(false)) else 'NOT ok' }}
-          Survey spec posted (question var=content):         {{ 'ok' if (_survey_ok | default(false)) else 'NOT ok' }}
-          Workflow launched (job {{ _launch_job_id | default("N/A") }}):  {{ 'ok' if (_launch_ok | default(false)) else 'NOT ok' }}
-          Workflow job completed successfully:               {{ 'ok' if (_workflow_successful | default(false)) else 'NOT ok' }}
-          NodeJS app returns HTTP 200:                       {{ 'ok' if (_nodejs_ok | default(false)) else 'NOT ok (or node1_hostname not injected)' }}
-          Custom role "WorkflowNightShifter" exists:        {{ 'ok' if (_role_ok | default(false)) else 'NOT ok' }}
-          User "nightshift" exists:                          {{ 'ok' if (_user_ok | default(false)) else 'NOT ok' }}
-          Team "NightShifters" exists:                       {{ 'ok' if (_team_ok | default(false)) else 'NOT ok' }}
-          User "nightshift" in "NightShifters" team:        {{ 'ok' if (_team_member_ok | default(false)) else 'NOT ok' }}
-          WorkflowNightShifter role assigned to team:        {{ 'ok' if (_role_assignment_ok | default(false)) else 'NOT ok' }}
+          "Deploy Webapplication" WFJT exists:                  {{ 'ok' if (_wfjt_ok | default(false)) else 'NOT ok' }}
+          Survey spec posted (var=content, type=text):           {{ 'ok' if (_survey_ok | default(false)) else 'NOT ok' }}
+          Admin workflow job (FTL_SOLVE_MODULE04) succeeded:     {{ 'ok (job ' ~ (_admin_job_id | default('N/A')) ~ ')' if (_admin_workflow_ok | default(false)) else 'NOT ok' }}
+          NodeJS returns FTL_SOLVE_MODULE04 at /nodejs:          {{ 'ok' if (_nodejs_content_ok | default(false)) else 'NOT ok' }}
+          Custom role "WorkflowNightShifter" exists:             {{ 'ok' if (_role_ok | default(false)) else 'NOT ok' }}
+          User "nightshift" exists:                              {{ 'ok' if (_user_ok | default(false)) else 'NOT ok' }}
+          Team "NightShifters" exists:                           {{ 'ok' if (_team_ok | default(false)) else 'NOT ok' }}
+          User "nightshift" in "NightShifters" team:             {{ 'ok' if (_team_member_ok | default(false)) else 'NOT ok' }}
+          WorkflowNightShifter role assigned to NightShifters:   {{ 'ok' if (_role_assignment_ok | default(false)) else 'NOT ok' }}
+          nightshift sees exactly 1 WFJT:                        {{ 'ok' if (_nightshift_sees_1_wfjt | default(false)) else 'NOT ok' }}
+          Nightshift workflow (FTL_SOLVE_MODULE04_NIGHT) succeeded: {{ 'ok (job ' ~ (_night_job_id | default('N/A')) ~ ')' if (_night_workflow_ok | default(false)) else 'NOT ok' }}

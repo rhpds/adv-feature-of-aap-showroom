@@ -1,82 +1,78 @@
 ---
-# Module 09 Solve — Policy Enforcement
+# Module 09 Solve — Policy Enforcement (OPA)
 #
-# What this playbook does:
-#   1. Clones opa-policy-enforcement repo from Gitea on the bastion
-#   2. Copies all rego policies to /var/lib/opa/policies/
-#   3. Finds the "Demo Job Template" ID via AAP API
-#   4. Sets opa_query_path to aap/deny and verifies it blocks execution (prose-02)
-#   5. Sets opa_query_path to aap/extravars with color=red and verifies block (prose-03)
-#   6. Sets extra_vars color=blue and verifies job runs (prose-04)
-#   7. Gets current UTC hour, patches maintenance_window.rego to include it (prose-06)
-#   8. Sets opa_query_path to aap/maintenance, creates "maintenance" label,
-#      associates it with Demo Job Template, launches — expects success (prose-07)
-#   9. Removes maintenance label, launches — expects block (prose-08)
-#  10. Patches maintenance window to exclude current time,
-#      re-adds maintenance label, launches — expects block (prose-09)
-#  11. Final state: opa_query_path=aap/maintenance, maintenance label on JT, window excludes now
-#      (validate.yml checks policy != empty and maintenance label present)
+# What this playbook automates:
+#   block-01: Clone opa-policy-enforcement from Gitea on bastion; copy *.rego to /var/lib/opa/policies/
+#   prose-03: PATCH Demo JT policy_enforcement="aap/deny"; launch; assert FAILS (policy violation)
+#   prose-04: PATCH Demo JT policy_enforcement="aap/extravars", extra_vars color=red; launch; assert FAILS
+#   prose-05: PATCH extra_vars color=blue; launch; assert SUCCEEDS
+#   prose-07: Get current UTC hour on bastion; patch maintenance_window.rego to bracket current hour
+#   prose-08: PATCH Demo JT policy_enforcement="aap/maintenance"; add label "maintenance"; launch; assert SUCCEEDS
+#   prose-09: Remove label "maintenance"; launch; assert FAILS (no label)
+#   prose-10: Patch maintenance_window.rego to window OUTSIDE current hour;
+#             re-add label "maintenance"; launch; assert FAILS (outside window)
 #
-# SKIP (visual/exploratory only):
-#   prose-01: view OPA server settings in AAP UI
-#   prose-05: "play around" with extra vars
+# SKIP (visual / exploratory only):
+#   prose-01: AAP login
+#   prose-02: Read-only OPA settings view
+#   prose-06: Open-ended exploration
+#   prose-11: prose-06 equivalent
 #
-# All file/OPA tasks run on bastion (where /var/lib/opa/policies/ lives).
-# AAP REST calls also run on bastion via curl — bastion can reach the controller.
+# Play 1: build dynamic bastion inventory (localhost)
+# Play 2: bastion — git clone, copy policies, get UTC hour, patch maintenance_window.rego
+# Play 3: localhost — all AAP REST API calls (PATCH JT, launch, poll, assert)
 #
-# Notes:
-#   - AAP 2.5 unified gateway: REST API base is /api/controller/v2/ (not /api/v2/)
-#   - OPA field on job template: opa_query_path (not "policy")
-#   - OPA container mounts /var/lib/opa/policies as /policies and --watch auto-reloads
-#   - Gitea URL derived from controller_url: replace "controller-" with "gitea-"
+# All variables are resolved via lookup('ansible.builtin.env', ...) — no bare extravars.
+# AAP 2.5 unified gateway: REST API base is /api/controller/v2/
+# OPA container mounts /var/lib/opa/policies as /policies and --watch auto-reloads on change.
 
-# =========================================================================
-# Play 0 — Build dynamic bastion inventory from extravars
-# =========================================================================
+# =============================================================================
+# Play 1 — Build dynamic bastion inventory from environment variables
+# =============================================================================
 - name: Build bastion inventory
   hosts: localhost
+  connection: local
   gather_facts: false
+  vars:
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user', true) }}"
+    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
   tasks:
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
         groups: bastion
-        ansible_host: "{{ bastion_host }}"
-        ansible_port: "{{ bastion_port | default(22) }}"
-        ansible_user: "{{ bastion_user | default('lab-user') }}"
-        ansible_password: "{{ bastion_password | default('') }}"
-        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
+        ansible_host: "{{ _ssh_host }}"
+        ansible_port: "{{ _ssh_port }}"
+        ansible_user: "{{ _ssh_user }}"
+        ansible_password: "{{ _ssh_pass }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: bastion_host | default('') | length > 0
+      when: _ssh_host | length > 0
 
-# =========================================================================
-# Play 1 — All tasks run on bastion
-# =========================================================================
-- name: Module 09 Solve — Policy Enforcement
+# =============================================================================
+# Play 2 — Bastion: clone OPA policies, copy to policy dir, patch rego file
+# =============================================================================
+- name: Module 09 — Bastion file operations
   hosts: bastion
   gather_facts: false
   vars:
-    aap_url: "{{ controller_url | default('') }}"
-    aap_user: "{{ controller_username | default('lab-user') }}"
-    aap_pass: "{{ controller_password | default('') }}"
-    # Derive gitea_url from controller_url: replace "controller-" with "gitea-"
-    _gitea_url: "{{ controller_url | default('') | regex_replace('controller-', 'gitea-') }}"
-    _gitea_user: "{{ controller_username | default('lab-user') }}"
-    _gitea_pass: "{{ controller_password | default('') }}"
-    opa_policy_dir: /var/lib/opa/policies
-    repo_dir: /home/lab-user/opa-policy-enforcement
+    _gitea_url: "{{ lookup('ansible.builtin.env', 'GITEA_URL') }}"
+    _gitea_user: "{{ lookup('ansible.builtin.env', 'GITEA_USERNAME') }}"
+    _opa_policy_dir: /var/lib/opa/policies
+    _repo_dir: /home/lab-user/opa-policy-enforcement
 
   tasks:
 
-    # =========================================================================
-    # block-01: Clone OPA policy repo and copy policies to OPA directory
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # block-01: Clone opa-policy-enforcement repo (idempotent) and copy policies
+    # -------------------------------------------------------------------------
     - name: Clone opa-policy-enforcement repo from Gitea (idempotent)
       ansible.builtin.shell: |
-        if [ -d "{{ repo_dir }}/.git" ]; then
-          git -C "{{ repo_dir }}" pull --ff-only 2>&1 && echo updated || echo already-ok
+        if [ -d "{{ _repo_dir }}/.git" ]; then
+          git -C "{{ _repo_dir }}" pull --ff-only 2>&1 && echo updated || echo already-ok
         else
-          git clone "{{ _gitea_url }}/{{ _gitea_user }}/opa-policy-enforcement.git" "{{ repo_dir }}" 2>&1 && echo cloned
+          git clone "{{ _gitea_url }}/{{ _gitea_user }}/opa-policy-enforcement.git" "{{ _repo_dir }}" 2>&1 && echo cloned
         fi
       register: r_clone
       changed_when: "'cloned' in r_clone.stdout or 'updated' in r_clone.stdout"
@@ -84,40 +80,107 @@
 
     - name: Copy rego policies to OPA policy directory
       ansible.builtin.shell: |
-        mkdir -p "{{ opa_policy_dir }}"
-        cp "{{ repo_dir }}"/*.rego "{{ opa_policy_dir }}/" 2>&1 && echo copied
+        mkdir -p "{{ _opa_policy_dir }}"
+        cp "{{ _repo_dir }}"/*.rego "{{ _opa_policy_dir }}/" 2>&1 && echo copied
       register: r_copy
       changed_when: "'copied' in r_copy.stdout"
       ignore_errors: true
 
-    # =========================================================================
+    # -------------------------------------------------------------------------
     # Verify policy files are in place
-    # =========================================================================
+    # -------------------------------------------------------------------------
     - name: Check deny.rego exists
       ansible.builtin.stat:
-        path: "{{ opa_policy_dir }}/deny.rego"
+        path: "{{ _opa_policy_dir }}/deny.rego"
       register: r_deny_rego
 
     - name: Check extra_vars.rego exists
       ansible.builtin.stat:
-        path: "{{ opa_policy_dir }}/extra_vars.rego"
+        path: "{{ _opa_policy_dir }}/extra_vars.rego"
       register: r_extravars_rego
 
     - name: Check maintenance_window.rego exists
       ansible.builtin.stat:
-        path: "{{ opa_policy_dir }}/maintenance_window.rego"
+        path: "{{ _opa_policy_dir }}/maintenance_window.rego"
       register: r_maint_rego
 
-    - name: Set policy files present fact
+    - name: Set policy files present facts
       ansible.builtin.set_fact:
-        _deny_ok: "{{ r_deny_rego.stat.exists }}"
-        _extravars_ok: "{{ r_extravars_rego.stat.exists }}"
-        _maint_ok: "{{ r_maint_rego.stat.exists }}"
+        deny_ok: "{{ r_deny_rego.stat.exists }}"
+        extravars_ok: "{{ r_extravars_rego.stat.exists }}"
+        maint_ok: "{{ r_maint_rego.stat.exists }}"
 
-    # =========================================================================
-    # OPA server reachability check (port 8181)
-    # =========================================================================
-    - name: Check OPA server is reachable on bastion:8181
+    # -------------------------------------------------------------------------
+    # prose-07 (part A): Get current UTC hour
+    # -------------------------------------------------------------------------
+    - name: Get current UTC hour
+      ansible.builtin.shell: date -u +%H
+      register: r_utc_hour
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set UTC hour facts
+      ansible.builtin.set_fact:
+        current_hour: "{{ r_utc_hour.stdout | trim | int }}"
+        window_start_hour: "{{ r_utc_hour.stdout | trim | int }}"
+        window_end_hour: "{{ (r_utc_hour.stdout | trim | int + 2) % 24 }}"
+
+    # -------------------------------------------------------------------------
+    # prose-07 (part B): Patch maintenance_window.rego to include current time
+    # Window = [current_hour, current_hour+2) — solver uses this for prose-08/prose-09
+    # -------------------------------------------------------------------------
+    - name: Patch maintenance_window.rego with current-time-inclusive window
+      ansible.builtin.shell: |
+        REGO="{{ _opa_policy_dir }}/maintenance_window.rego"
+        sed -i "s/^\s*window_start_hour\s*:=\s*[0-9]*/window_start_hour := {{ window_start_hour }}/" "$REGO"
+        sed -i "s/^\s*window_start_minute\s*:=\s*[0-9]*/window_start_minute := 0/" "$REGO"
+        sed -i "s/^\s*window_end_hour\s*:=\s*[0-9]*/window_end_hour := {{ window_end_hour }}/" "$REGO"
+        sed -i "s/^\s*window_end_minute\s*:=\s*[0-9]*/window_end_minute := 0/" "$REGO"
+        echo "patched window {{ window_start_hour }}:00 to {{ window_end_hour }}:00"
+      register: r_patch_rego_incl
+      changed_when: true
+      ignore_errors: true
+
+    - name: Verify maintenance_window.rego has correct inclusive start hour
+      ansible.builtin.shell: |
+        grep "window_start_hour" "{{ _opa_policy_dir }}/maintenance_window.rego" | grep -q "{{ window_start_hour }}" && echo ok || echo wrong
+      register: r_rego_incl_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set maintenance window inclusive patched fact
+      ansible.builtin.set_fact:
+        maint_window_incl_patched: "{{ (r_rego_incl_check.stdout | default('wrong') | trim) == 'ok' }}"
+
+    # -------------------------------------------------------------------------
+    # prose-10 (part A): Patch maintenance_window.rego OUTSIDE current time
+    # Window moved to +12h from now — safely excludes current time.
+    # This is done now so Play 3 can reference the state after prose-09 actions.
+    # Play 3 will re-add label then launch to assert block; after assertion it
+    # checks OPA directly via curl to confirm "allowed=false".
+    # -------------------------------------------------------------------------
+    - name: Patch maintenance_window.rego to window OUTSIDE current time
+      ansible.builtin.shell: |
+        REGO="{{ _opa_policy_dir }}/maintenance_window.rego"
+        EXCL_START=$(( ({{ current_hour }} + 12) % 24 ))
+        EXCL_END=$(( ({{ current_hour }} + 14) % 24 ))
+        sed -i "s/^\s*window_start_hour\s*:=\s*[0-9]*/window_start_hour := ${EXCL_START}/" "$REGO"
+        sed -i "s/^\s*window_start_minute\s*:=\s*[0-9]*/window_start_minute := 0/" "$REGO"
+        sed -i "s/^\s*window_end_hour\s*:=\s*[0-9]*/window_end_hour := ${EXCL_END}/" "$REGO"
+        sed -i "s/^\s*window_end_minute\s*:=\s*[0-9]*/window_end_minute := 0/" "$REGO"
+        echo "window moved to ${EXCL_START}:00-${EXCL_END}:00 (current {{ current_hour }}:xx excluded)"
+      register: r_patch_rego_excl
+      changed_when: true
+      ignore_errors: true
+
+    - name: Set outside window patched fact
+      ansible.builtin.set_fact:
+        maint_window_excl_patched: "{{ r_patch_rego_excl.rc | default(1) == 0 }}"
+
+    # -------------------------------------------------------------------------
+    # OPA server reachability check from bastion localhost
+    # -------------------------------------------------------------------------
+    - name: Check OPA server reachable on bastion:8181/health
       ansible.builtin.shell: |
         curl -s -o /dev/null -w "%{http_code}" http://localhost:8181/health 2>/dev/null || echo 000
       register: r_opa_health
@@ -126,550 +189,578 @@
 
     - name: Set OPA reachable fact
       ansible.builtin.set_fact:
-        _opa_reachable: "{{ (r_opa_health.stdout | default('000') | trim) in ['200', '204'] }}"
+        opa_reachable: "{{ (r_opa_health.stdout | default('000') | trim) in ['200', '204'] }}"
 
-    # =========================================================================
-    # Discover Demo Job Template ID via AAP API
-    # =========================================================================
-    - name: Get Demo Job Template ID from AAP API
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/controller/v2/job_templates/?name=Demo+Job+Template" \
-          -H "Content-Type: application/json" | \
-          python3 -c "import json,sys; d=json.load(sys.stdin); results=d.get('results',[]); print(results[0]['id'] if results else 'NOT_FOUND')"
-      register: r_jt_id
-      changed_when: false
+    # -------------------------------------------------------------------------
+    # Share facts to Play 3 via dummy host
+    # -------------------------------------------------------------------------
+    - name: Persist bastion facts to dummy host for Play 3
+      ansible.builtin.add_host:
+        name: _facts_relay
+        groups: facts_relay
+        bastion_deny_ok: "{{ deny_ok }}"
+        bastion_extravars_ok: "{{ extravars_ok }}"
+        bastion_maint_ok: "{{ maint_ok }}"
+        bastion_opa_reachable: "{{ opa_reachable }}"
+        bastion_maint_window_incl_patched: "{{ maint_window_incl_patched }}"
+        bastion_maint_window_excl_patched: "{{ maint_window_excl_patched }}"
+
+# =============================================================================
+# Play 3 — Localhost: all AAP REST API calls
+# =============================================================================
+- name: Module 09 — AAP REST API policy enforcement steps
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    _controller_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/$', '') }}"
+    _controller_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+    _controller_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+    _aap_api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/$', '') }}/api/controller/v2"
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # Discover Demo Job Template ID
+    # -------------------------------------------------------------------------
+    - name: Query Demo Job Template ID from AAP API
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/?name=Demo+Job+Template"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_jt_query
       ignore_errors: true
 
-    - name: Set job template ID fact
+    - name: Set Demo Job Template ID fact
       ansible.builtin.set_fact:
-        jt_id: "{{ r_jt_id.stdout | default('NOT_FOUND') | trim }}"
+        jt_id: "{{ (r_jt_query.json.results | default([]) | first).id | default('') | string }}"
+      when: r_jt_query.json.count | default(0) | int > 0
 
     - name: Warn if Demo Job Template not found
       ansible.builtin.debug:
-        msg: "WARNING: Demo Job Template not found via AAP API — cannot proceed with policy steps"
-      when: jt_id == 'NOT_FOUND'
+        msg: "WARNING: Demo Job Template not found — cannot proceed with policy steps"
+      when: jt_id | default('') | length == 0
 
-    # =========================================================================
-    # prose-02: Set opa_query_path = aap/deny, clear extra_vars, launch — expect block
-    # =========================================================================
-    - name: Set Demo Job Template opa_query_path to aap/deny
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X PATCH \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/" \
-          -H "Content-Type: application/json" \
-          -d '{"opa_query_path": "aap/deny", "extra_vars": ""}' \
-          -o /tmp/aap_patch_deny.json -w "%{http_code}"
+    # -------------------------------------------------------------------------
+    # prose-03: Set policy_enforcement=aap/deny, clear extra_vars; launch; assert FAILS
+    # -------------------------------------------------------------------------
+    - name: "prose-03: PATCH Demo JT — opa_query_path=aap/deny, clear extra_vars"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/"
+        method: PATCH
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          opa_query_path: "aap/deny"
+          extra_vars: ""
+        status_code: [200]
       register: r_patch_deny
-      changed_when: true
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Launch Demo Job Template with aap/deny (expect block)
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/launch/" \
-          -H "Content-Type: application/json" \
-          -d '{}' \
-          -o /tmp/aap_launch_deny.json -w "%{http_code}"
+    - name: "prose-03: Launch Demo JT with aap/deny (expect policy violation block)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/launch/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body: {}
+        status_code: [200, 201, 400, 403]
       register: r_launch_deny
-      changed_when: false
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Wait briefly for deny-policy job to settle
-      ansible.builtin.pause:
-        seconds: 5
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Check deny policy violation in launch response
-      ansible.builtin.shell: |
-        python3 -c "
-        import json
-        try:
-            d = json.load(open('/tmp/aap_launch_deny.json'))
-            detail = str(d)
-            if 'No job execution is allowed' in detail or 'policy violation' in detail.lower():
-                print('blocked')
-            else:
-                print('not-blocked: ' + detail[:200])
-        except Exception as e:
-            print('parse-error: ' + str(e))
-        "
-      register: r_deny_check
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Set deny policy block fact
+    - name: "prose-03: Set deny policy block fact"
       ansible.builtin.set_fact:
-        _deny_policy_blocks: "{{ (r_deny_check.stdout | default('') | trim) == 'blocked' }}"
-      when: jt_id != 'NOT_FOUND'
+        deny_policy_blocks: >-
+          {{
+            ('No job execution is allowed' in (r_launch_deny.json | to_json))
+            or ('policy violation' in (r_launch_deny.json | to_json | lower))
+            or ('policy' in (r_launch_deny.json | to_json | lower) and r_launch_deny.status | default(0) in [400, 403])
+          }}
+      when: jt_id | default('') | length > 0
 
-    # =========================================================================
-    # prose-03: Set opa_query_path = aap/extravars, extra_vars color=red — expect block
-    # =========================================================================
-    - name: Set Demo Job Template opa_query_path to aap/extravars with color=red
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X PATCH \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/" \
-          -H "Content-Type: application/json" \
-          -d '{"opa_query_path": "aap/extravars", "extra_vars": "color: red"}' \
-          -o /tmp/aap_patch_extravars_red.json -w "%{http_code}"
+    # -------------------------------------------------------------------------
+    # prose-04: Set policy_enforcement=aap/extravars, extra_vars color=red; launch; assert FAILS
+    # -------------------------------------------------------------------------
+    - name: "prose-04: PATCH Demo JT — opa_query_path=aap/extravars, extra_vars color=red"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/"
+        method: PATCH
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          opa_query_path: "aap/extravars"
+          extra_vars: "color: red"
+        status_code: [200]
       register: r_patch_extravars_red
-      changed_when: true
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Launch Demo Job Template with color=red (expect extravars block)
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/launch/" \
-          -H "Content-Type: application/json" \
-          -d '{}' \
-          -o /tmp/aap_launch_extravars_red.json -w "%{http_code}"
+    - name: "prose-04: Launch Demo JT with color=red (expect extravars block)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/launch/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body: {}
+        status_code: [200, 201, 400, 403]
       register: r_launch_extravars_red
-      changed_when: false
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Wait briefly for extravars-red policy job to settle
-      ansible.builtin.pause:
-        seconds: 5
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Check extravars-red policy violation in launch response
-      ansible.builtin.shell: |
-        python3 -c "
-        import json
-        try:
-            d = json.load(open('/tmp/aap_launch_extravars_red.json'))
-            detail = str(d)
-            if 'policy violation' in detail.lower() or 'color' in detail.lower():
-                print('blocked')
-            else:
-                print('not-blocked: ' + detail[:200])
-        except Exception as e:
-            print('parse-error: ' + str(e))
-        "
-      register: r_extravars_red_check
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Set extravars-red policy block fact
+    - name: "prose-04: Set extravars-red block fact"
       ansible.builtin.set_fact:
-        _extravars_red_blocks: "{{ (r_extravars_red_check.stdout | default('') | trim) == 'blocked' }}"
-      when: jt_id != 'NOT_FOUND'
+        extravars_red_blocks: >-
+          {{
+            ('policy violation' in (r_launch_extravars_red.json | to_json | lower))
+            or (r_launch_extravars_red.status | default(0) in [400, 403]
+                and 'color' in (r_launch_extravars_red.json | to_json | lower))
+            or (r_launch_extravars_red.status | default(0) in [400, 403]
+                and 'policy' in (r_launch_extravars_red.json | to_json | lower))
+          }}
+      when: jt_id | default('') | length > 0
 
-    # =========================================================================
-    # prose-04: Set extra_vars color=blue — expect job runs successfully
-    # =========================================================================
-    - name: Set Demo Job Template extra_vars to color=blue (opa_query_path aap/extravars)
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X PATCH \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/" \
-          -H "Content-Type: application/json" \
-          -d '{"opa_query_path": "aap/extravars", "extra_vars": "color: blue"}' \
-          -o /tmp/aap_patch_extravars_blue.json -w "%{http_code}"
+    # -------------------------------------------------------------------------
+    # prose-05: Set extra_vars color=blue (same opa_query_path=aap/extravars); launch; assert SUCCEEDS
+    # -------------------------------------------------------------------------
+    - name: "prose-05: PATCH Demo JT — extra_vars color=blue (aap/extravars)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/"
+        method: PATCH
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          opa_query_path: "aap/extravars"
+          extra_vars: "color: blue"
+        status_code: [200]
       register: r_patch_extravars_blue
-      changed_when: true
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Launch Demo Job Template with color=blue (expect success)
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/launch/" \
-          -H "Content-Type: application/json" \
-          -d '{}' \
-          -o /tmp/aap_launch_extravars_blue.json -w "%{http_code}"
+    - name: "prose-05: Launch Demo JT with color=blue (expect success)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/launch/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body: {}
+        status_code: [200, 201]
       register: r_launch_extravars_blue
-      changed_when: false
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Wait for blue-launch job to complete
-      ansible.builtin.pause:
-        seconds: 15
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Check extravars-blue launch was accepted (got job ID, not blocked)
-      ansible.builtin.shell: |
-        python3 -c "
-        import json
-        try:
-            d = json.load(open('/tmp/aap_launch_extravars_blue.json'))
-            detail = str(d)
-            job_id = d.get('job', d.get('id', None))
-            if job_id and 'policy violation' not in detail.lower():
-                print('allowed')
-            else:
-                print('not-allowed: ' + detail[:200])
-        except Exception as e:
-            print('parse-error: ' + str(e))
-        "
-      register: r_extravars_blue_check
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Set extravars-blue allowed fact
+    - name: "prose-05: Set blue-launch allowed fact"
       ansible.builtin.set_fact:
-        _extravars_blue_allowed: "{{ (r_extravars_blue_check.stdout | default('') | trim) == 'allowed' }}"
-      when: jt_id != 'NOT_FOUND'
+        extravars_blue_allowed: >-
+          {{
+            r_launch_extravars_blue.status | default(0) in [200, 201]
+            and 'policy violation' not in (r_launch_extravars_blue.json | to_json | lower)
+            and (r_launch_extravars_blue.json.get('job', r_launch_extravars_blue.json.get('id', '')) | string | length > 0)
+          }}
+      when: jt_id | default('') | length > 0
 
-    # =========================================================================
-    # prose-06: Get current UTC hour and patch maintenance_window.rego to
-    # include the current time. Uses a 2-hour window: [current_hour, current_hour+2)
-    # =========================================================================
-    - name: Get current UTC hour
-      ansible.builtin.shell: date -u +%H
-      register: r_utc_hour
-      changed_when: false
+    - name: "prose-05: Poll blue-launch job to completion (up to 60s)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/jobs/{{ r_launch_extravars_blue.json.job | default(r_launch_extravars_blue.json.id) }}/"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_poll_blue
+      until: r_poll_blue.json.status | default('') in ['successful', 'failed', 'canceled', 'error']
+      retries: 12
+      delay: 5
       ignore_errors: true
+      when:
+        - jt_id | default('') | length > 0
+        - extravars_blue_allowed | default(false)
+        - r_launch_extravars_blue.json.job | default(r_launch_extravars_blue.json.get('id', '')) | string | length > 0
 
-    - name: Set UTC hour facts (window = current_hour to current_hour+2)
-      ansible.builtin.set_fact:
-        _current_hour: "{{ r_utc_hour.stdout | trim | int }}"
-        _window_start_hour: "{{ r_utc_hour.stdout | trim | int }}"
-        _window_end_hour: "{{ (r_utc_hour.stdout | trim | int + 2) % 24 }}"
-
-    - name: Patch maintenance_window.rego with current-time-inclusive window
-      ansible.builtin.shell: |
-        REGO="{{ opa_policy_dir }}/maintenance_window.rego"
-        sed -i "s/^window_start_hour := [0-9]*/window_start_hour := {{ _window_start_hour }}/" "$REGO"
-        sed -i "s/^window_start_minute := [0-9]*/window_start_minute := 0/" "$REGO"
-        sed -i "s/^window_end_hour := [0-9]*/window_end_hour := {{ _window_end_hour }}/" "$REGO"
-        sed -i "s/^window_end_minute := [0-9]*/window_end_minute := 0/" "$REGO"
-        echo "patched window {{ _window_start_hour }}:00 to {{ _window_end_hour }}:00"
-      register: r_patch_rego
-      changed_when: true
-      ignore_errors: true
-
-    - name: Verify maintenance_window.rego has correct start hour
-      ansible.builtin.shell: |
-        grep "^window_start_hour" "{{ opa_policy_dir }}/maintenance_window.rego" | grep -q "{{ _window_start_hour }}" && echo ok || echo wrong
-      register: r_rego_start_check
-      changed_when: false
-      ignore_errors: true
-
-    - name: Set maintenance window patched fact
-      ansible.builtin.set_fact:
-        _maint_window_patched: "{{ (r_rego_start_check.stdout | default('wrong') | trim) == 'ok' }}"
-
-    # =========================================================================
-    # prose-07: Set opa_query_path = aap/maintenance, create "maintenance" label,
-    # associate label with Demo Job Template, launch — expect success
-    # =========================================================================
-    - name: Set Demo Job Template opa_query_path to aap/maintenance and clear extra_vars
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X PATCH \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/" \
-          -H "Content-Type: application/json" \
-          -d '{"opa_query_path": "aap/maintenance", "extra_vars": ""}' \
-          -o /tmp/aap_patch_maint.json -w "%{http_code}"
+    # -------------------------------------------------------------------------
+    # prose-08 (setup): PATCH Demo JT opa_query_path=aap/maintenance; find/create label; associate
+    # -------------------------------------------------------------------------
+    - name: "prose-08: PATCH Demo JT — opa_query_path=aap/maintenance, clear extra_vars"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/"
+        method: PATCH
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          opa_query_path: "aap/maintenance"
+          extra_vars: ""
+        status_code: [200]
       register: r_patch_maint
-      changed_when: true
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    # Find or create the "maintenance" label in AAP
-    - name: Find "maintenance" label in AAP
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/controller/v2/labels/?name=maintenance" \
-          -H "Content-Type: application/json" | \
-          python3 -c "import json,sys; d=json.load(sys.stdin); results=d.get('results',[]); print(results[0]['id'] if results else 'NOT_FOUND')"
-      register: r_label_find
-      changed_when: false
+    - name: Query Default organization ID
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/organizations/?name=Default"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_org
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
 
-    # Discover the Default organization ID (needed to create label)
-    - name: Get Default organization ID
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/controller/v2/organizations/?name=Default" \
-          -H "Content-Type: application/json" | \
-          python3 -c "import json,sys; d=json.load(sys.stdin); results=d.get('results',[]); print(results[0]['id'] if results else '1')"
-      register: r_org_id
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Set org ID fact
+    - name: Set Default org ID fact
       ansible.builtin.set_fact:
-        org_id: "{{ r_org_id.stdout | default('1') | trim }}"
-      when: jt_id != 'NOT_FOUND'
+        default_org_id: "{{ (r_org.json.results | default([{'id': 1}]) | first).id | default(1) | int }}"
 
-    - name: Create "maintenance" label in AAP if it does not exist
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/labels/" \
-          -H "Content-Type: application/json" \
-          -d "{\"name\": \"maintenance\", \"organization\": {{ org_id }}}" \
-          -o /tmp/aap_label_create.json -w "%{http_code}"
+    - name: Query existing maintenance label in AAP
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/labels/?name=maintenance"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_label_find
+      ignore_errors: true
+
+    - name: Create maintenance label in AAP if absent
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/labels/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          name: "maintenance"
+          organization: "{{ default_org_id }}"
+        status_code: [200, 201]
       register: r_label_create
-      changed_when: true
       ignore_errors: true
-      when:
-        - jt_id != 'NOT_FOUND'
-        - (r_label_find.stdout | default('NOT_FOUND') | trim) == 'NOT_FOUND'
+      when: r_label_find.json.count | default(0) | int == 0
 
-    # Re-read label ID from creation response when label was just created
-    - name: Parse new label ID from creation response
-      ansible.builtin.shell: |
-        python3 -c "
-        import json
-        try:
-            d = json.load(open('/tmp/aap_label_create.json'))
-            print(d.get('id', 'NOT_FOUND'))
-        except:
-            print('NOT_FOUND')
-        "
-      register: r_label_id_from_create
-      changed_when: false
-      ignore_errors: true
-      when:
-        - jt_id != 'NOT_FOUND'
-        - (r_label_find.stdout | default('NOT_FOUND') | trim) == 'NOT_FOUND'
-
-    - name: Resolve final maintenance label ID
+    - name: Resolve maintenance label ID
       ansible.builtin.set_fact:
         maintenance_label_id: >-
           {{
-            r_label_find.stdout | trim
-            if (r_label_find.stdout | default('NOT_FOUND') | trim) != 'NOT_FOUND'
-            else (r_label_id_from_create.stdout | default('NOT_FOUND') | trim)
+            (r_label_find.json.results | default([]) | first).id | default('')
+            if r_label_find.json.count | default(0) | int > 0
+            else r_label_create.json.id | default('')
           }}
-      when: jt_id != 'NOT_FOUND'
 
-    - name: Associate "maintenance" label with Demo Job Template
+    # prose-08 (part B): maintenance window is currently INCLUSIVE (patched in Play 2).
+    # But Play 2 already patched to EXCLUSIVE at the end to leave final state correct.
+    # We need to re-patch to INCLUSIVE first for prose-08 (label+inside-window → success).
+    # We do this via a second pass on bastion through a delegated shell.
+    - name: "prose-08: Re-patch maintenance_window.rego to INCLUSIVE window for this launch"
       ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/labels/" \
-          -H "Content-Type: application/json" \
-          -d "{\"id\": {{ maintenance_label_id }}}" \
-          -o /tmp/aap_label_assoc.json -w "%{http_code}"
+        REGO=/var/lib/opa/policies/maintenance_window.rego
+        CUR_HOUR=$(date -u +%H | sed 's/^0//')
+        WIN_END=$(( (CUR_HOUR + 2) % 24 ))
+        sed -i "s/^\s*window_start_hour\s*:=\s*[0-9]*/window_start_hour := ${CUR_HOUR}/" "$REGO"
+        sed -i "s/^\s*window_start_minute\s*:=\s*[0-9]*/window_start_minute := 0/" "$REGO"
+        sed -i "s/^\s*window_end_hour\s*:=\s*[0-9]*/window_end_hour := ${WIN_END}/" "$REGO"
+        sed -i "s/^\s*window_end_minute\s*:=\s*[0-9]*/window_end_minute := 0/" "$REGO"
+        echo "re-patched inclusive: ${CUR_HOUR}:00-${WIN_END}:00"
+      delegate_to: bastion
+      register: r_repatch_incl
+      changed_when: true
+      ignore_errors: true
+
+    - name: "prose-08: Wait 3s for OPA to reload patched rego"
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: "prose-08: Associate maintenance label with Demo Job Template"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/labels/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          id: "{{ maintenance_label_id | int }}"
+        status_code: [200, 201, 204]
       register: r_label_assoc
-      changed_when: true
       ignore_errors: true
       when:
-        - jt_id != 'NOT_FOUND'
-        - maintenance_label_id is defined
-        - maintenance_label_id | string != 'NOT_FOUND'
+        - jt_id | default('') | length > 0
+        - maintenance_label_id | default('') | string | length > 0
 
-    - name: Launch Demo Job Template with maintenance label + inside window (expect success)
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/launch/" \
-          -H "Content-Type: application/json" \
-          -d '{}' \
-          -o /tmp/aap_launch_maint_with_label.json -w "%{http_code}"
+    - name: "prose-08: Launch Demo JT with maintenance label inside window (expect success)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/launch/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body: {}
+        status_code: [200, 201]
       register: r_launch_maint_with_label
-      changed_when: false
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Wait for maintenance+label job to settle
-      ansible.builtin.pause:
-        seconds: 15
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Check maintenance+label launch was accepted (inside window)
-      ansible.builtin.shell: |
-        python3 -c "
-        import json
-        try:
-            d = json.load(open('/tmp/aap_launch_maint_with_label.json'))
-            detail = str(d)
-            job_id = d.get('job', d.get('id', None))
-            if job_id and 'policy violation' not in detail.lower():
-                print('allowed')
-            else:
-                print('not-allowed: ' + detail[:300])
-        except Exception as e:
-            print('parse-error: ' + str(e))
-        "
-      register: r_maint_with_label_check
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Set maintenance+label allowed fact
+    - name: "prose-08: Set maintenance+label-inside-window allowed fact"
       ansible.builtin.set_fact:
-        _maint_with_label_allowed: "{{ (r_maint_with_label_check.stdout | default('') | trim) == 'allowed' }}"
-      when: jt_id != 'NOT_FOUND'
+        maint_with_label_allowed: >-
+          {{
+            r_launch_maint_with_label.status | default(0) in [200, 201]
+            and 'policy violation' not in (r_launch_maint_with_label.json | to_json | lower)
+          }}
+      when: jt_id | default('') | length > 0
 
-    # =========================================================================
-    # prose-08: Remove "maintenance" label from Job Template, launch — expect block
-    # (inside window, no label → policy blocks)
-    # =========================================================================
-    - name: Disassociate "maintenance" label from Demo Job Template
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/labels/" \
-          -H "Content-Type: application/json" \
-          -d "{\"id\": {{ maintenance_label_id }}, \"disassociate\": true}" \
-          -o /tmp/aap_label_disassoc.json -w "%{http_code}"
+    - name: "prose-08: Poll maintenance+label job to completion (up to 60s)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/jobs/{{ r_launch_maint_with_label.json.job | default(r_launch_maint_with_label.json.get('id', '')) }}/"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_poll_maint_label
+      until: r_poll_maint_label.json.status | default('') in ['successful', 'failed', 'canceled', 'error']
+      retries: 12
+      delay: 5
+      ignore_errors: true
+      when:
+        - jt_id | default('') | length > 0
+        - maint_with_label_allowed | default(false)
+        - r_launch_maint_with_label.json.job | default(r_launch_maint_with_label.json.get('id', '')) | string | length > 0
+
+    # -------------------------------------------------------------------------
+    # prose-09: Remove maintenance label; launch inside window; assert FAILS (no label)
+    # -------------------------------------------------------------------------
+    - name: "prose-09: Disassociate maintenance label from Demo Job Template"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/labels/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          id: "{{ maintenance_label_id | int }}"
+          disassociate: true
+        status_code: [200, 201, 204]
       register: r_label_disassoc
-      changed_when: true
       ignore_errors: true
       when:
-        - jt_id != 'NOT_FOUND'
-        - maintenance_label_id is defined
-        - maintenance_label_id | string != 'NOT_FOUND'
+        - jt_id | default('') | length > 0
+        - maintenance_label_id | default('') | string | length > 0
 
-    - name: Launch Demo Job Template without maintenance label (inside window — expect block)
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/launch/" \
-          -H "Content-Type: application/json" \
-          -d '{}' \
-          -o /tmp/aap_launch_maint_no_label.json -w "%{http_code}"
+    - name: "prose-09: Launch Demo JT without label, inside window (expect block — no label)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/launch/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body: {}
+        status_code: [200, 201, 400, 403]
       register: r_launch_maint_no_label
-      changed_when: false
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Wait briefly for no-label job to settle
-      ansible.builtin.pause:
-        seconds: 5
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Check no-label launch inside window is blocked
-      ansible.builtin.shell: |
-        python3 -c "
-        import json
-        try:
-            d = json.load(open('/tmp/aap_launch_maint_no_label.json'))
-            detail = str(d)
-            if 'policy violation' in detail.lower() or 'maintenance' in detail.lower():
-                print('blocked')
-            else:
-                print('not-blocked: ' + detail[:300])
-        except Exception as e:
-            print('parse-error: ' + str(e))
-        "
-      register: r_maint_no_label_check
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Set no-label-inside-window block fact
+    - name: "prose-09: Set no-label block fact"
       ansible.builtin.set_fact:
-        _maint_no_label_blocks: "{{ (r_maint_no_label_check.stdout | default('') | trim) == 'blocked' }}"
-      when: jt_id != 'NOT_FOUND'
+        maint_no_label_blocks: >-
+          {{
+            ('policy violation' in (r_launch_maint_no_label.json | to_json | lower))
+            or (r_launch_maint_no_label.status | default(0) in [400, 403]
+                and 'policy' in (r_launch_maint_no_label.json | to_json | lower))
+          }}
+      when: jt_id | default('') | length > 0
 
-    # =========================================================================
-    # prose-09: Patch window to exclude current time, re-add label, launch — expect block
-    # Window moved to +12h from now (safely excluded)
-    # =========================================================================
-    - name: Patch maintenance_window.rego with current-time-EXCLUDING window
+    # -------------------------------------------------------------------------
+    # prose-10: Patch rego to OUTSIDE window; re-add label; launch; assert FAILS (outside window)
+    # -------------------------------------------------------------------------
+    - name: "prose-10: Patch maintenance_window.rego to window OUTSIDE current time"
       ansible.builtin.shell: |
-        REGO="{{ opa_policy_dir }}/maintenance_window.rego"
-        EXCL_START=$(( ({{ _current_hour }} + 12) % 24 ))
-        EXCL_END=$(( ({{ _current_hour }} + 14) % 24 ))
-        sed -i "s/^window_start_hour := [0-9]*/window_start_hour := ${EXCL_START}/" "$REGO"
-        sed -i "s/^window_start_minute := [0-9]*/window_start_minute := 0/" "$REGO"
-        sed -i "s/^window_end_hour := [0-9]*/window_end_hour := ${EXCL_END}/" "$REGO"
-        sed -i "s/^window_end_minute := [0-9]*/window_end_minute := 0/" "$REGO"
-        echo "window moved to ${EXCL_START}:00-${EXCL_END}:00 (current time {{ _current_hour }}:xx excluded)"
-      register: r_patch_rego_excl
+        REGO=/var/lib/opa/policies/maintenance_window.rego
+        CUR_HOUR=$(date -u +%H | sed 's/^0//')
+        EXCL_START=$(( (CUR_HOUR + 12) % 24 ))
+        EXCL_END=$(( (CUR_HOUR + 14) % 24 ))
+        sed -i "s/^\s*window_start_hour\s*:=\s*[0-9]*/window_start_hour := ${EXCL_START}/" "$REGO"
+        sed -i "s/^\s*window_start_minute\s*:=\s*[0-9]*/window_start_minute := 0/" "$REGO"
+        sed -i "s/^\s*window_end_hour\s*:=\s*[0-9]*/window_end_hour := ${EXCL_END}/" "$REGO"
+        sed -i "s/^\s*window_end_minute\s*:=\s*[0-9]*/window_end_minute := 0/" "$REGO"
+        echo "window moved to ${EXCL_START}:00-${EXCL_END}:00 (current ${CUR_HOUR}:xx excluded)"
+      delegate_to: bastion
+      register: r_patch_rego_excl_final
       changed_when: true
       ignore_errors: true
 
-    - name: Re-associate "maintenance" label with Demo Job Template
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/labels/" \
-          -H "Content-Type: application/json" \
-          -d "{\"id\": {{ maintenance_label_id }}}" \
-          -o /tmp/aap_label_reassoc.json -w "%{http_code}"
+    - name: "prose-10: Wait 3s for OPA to reload after outside-window rego patch"
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: "prose-10: Re-associate maintenance label with Demo Job Template"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/labels/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body:
+          id: "{{ maintenance_label_id | int }}"
+        status_code: [200, 201, 204]
       register: r_label_reassoc
-      changed_when: true
       ignore_errors: true
       when:
-        - jt_id != 'NOT_FOUND'
-        - maintenance_label_id is defined
-        - maintenance_label_id | string != 'NOT_FOUND'
+        - jt_id | default('') | length > 0
+        - maintenance_label_id | default('') | string | length > 0
 
-    - name: Launch with maintenance label outside window (expect block)
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          -X POST \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/launch/" \
-          -H "Content-Type: application/json" \
-          -d '{}' \
-          -o /tmp/aap_launch_maint_outside_window.json -w "%{http_code}"
+    - name: "prose-10: Launch Demo JT with label but OUTSIDE maintenance window (expect block)"
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/launch/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        body_format: json
+        body: {}
+        status_code: [200, 201, 400, 403]
       register: r_launch_outside
-      changed_when: false
       ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
+      when: jt_id | default('') | length > 0
 
-    - name: Wait briefly for outside-window job to settle
-      ansible.builtin.pause:
-        seconds: 5
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Check maintenance+label outside window is blocked
-      ansible.builtin.shell: |
-        python3 -c "
-        import json
-        try:
-            d = json.load(open('/tmp/aap_launch_maint_outside_window.json'))
-            detail = str(d)
-            if 'policy violation' in detail.lower() or 'maintenance' in detail.lower():
-                print('blocked')
-            else:
-                print('not-blocked: ' + detail[:300])
-        except Exception as e:
-            print('parse-error: ' + str(e))
-        "
-      register: r_outside_window_check
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Set outside-window block fact
+    - name: "prose-10: Set outside-window block fact"
       ansible.builtin.set_fact:
-        _maint_outside_window_blocks: "{{ (r_outside_window_check.stdout | default('') | trim) == 'blocked' }}"
-      when: jt_id != 'NOT_FOUND'
+        maint_outside_window_blocks: >-
+          {{
+            ('policy violation' in (r_launch_outside.json | to_json | lower))
+            or (r_launch_outside.status | default(0) in [400, 403]
+                and 'policy' in (r_launch_outside.json | to_json | lower))
+          }}
+      when: jt_id | default('') | length > 0
 
-    # =========================================================================
-    # Final state: opa_query_path=aap/maintenance, maintenance label on JT
-    # validate.yml checks: opa_query_path non-empty + maintenance label present
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # Final state verification — read back Demo JT to confirm opa_query_path and label
+    # -------------------------------------------------------------------------
+    - name: Read back Demo Job Template final state
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_jt_final
+      ignore_errors: true
+      when: jt_id | default('') | length > 0
 
-    # =========================================================================
+    - name: Read back Demo Job Template label list
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/job_templates/{{ jt_id }}/labels/"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 30
+        status_code: [200]
+      register: r_jt_labels_final
+      ignore_errors: true
+      when: jt_id | default('') | length > 0
+
+    - name: Set final state facts
+      ansible.builtin.set_fact:
+        final_opa_query_path: "{{ r_jt_final.json.opa_query_path | default('') }}"
+        final_label_maintenance: >-
+          {{
+            (r_jt_labels_final.json.results | default([]) | selectattr('name', 'equalto', 'maintenance') | list | length) > 0
+          }}
+      when: jt_id | default('') | length > 0
+
+    # -------------------------------------------------------------------------
     # Report
-    # =========================================================================
+    # -------------------------------------------------------------------------
     - name: Report solve status
       ansible.builtin.debug:
         msg: |
-          deny.rego present in OPA policy dir:                 {{ 'ok' if _deny_ok else 'NOT ok' }}
-          extra_vars.rego present in OPA policy dir:           {{ 'ok' if _extravars_ok else 'NOT ok' }}
-          maintenance_window.rego present in OPA policy dir:   {{ 'ok' if _maint_ok else 'NOT ok' }}
-          OPA server reachable on bastion:8181:                {{ 'ok' if _opa_reachable else 'NOT ok' }}
-          Demo Job Template found (id={{ jt_id }}):            {{ 'ok' if jt_id != "NOT_FOUND" else 'NOT ok' }}
-          aap/deny blocks job execution:                       {{ 'ok' if (_deny_policy_blocks | default(false)) else 'NOT ok' }}
-          aap/extravars blocks color=red:                      {{ 'ok' if (_extravars_red_blocks | default(false)) else 'NOT ok' }}
-          aap/extravars allows color=blue:                     {{ 'ok' if (_extravars_blue_allowed | default(false)) else 'NOT ok' }}
-          maintenance_window.rego patched with current hour:   {{ 'ok' if _maint_window_patched else 'NOT ok' }}
-          aap/maintenance + label allows job inside window:    {{ 'ok' if (_maint_with_label_allowed | default(false)) else 'NOT ok' }}
-          aap/maintenance without label blocks inside window:  {{ 'ok' if (_maint_no_label_blocks | default(false)) else 'NOT ok' }}
-          aap/maintenance + label blocks job outside window:   {{ 'ok' if (_maint_outside_window_blocks | default(false)) else 'NOT ok' }}
+          === Module 09 Solve — Policy Enforcement (OPA) ===
+
+          [Bastion — policy files]
+          deny.rego in /var/lib/opa/policies:               {{ 'ok' if hostvars['_facts_relay']['bastion_deny_ok'] | default(false) else 'NOT ok' }}
+          extra_vars.rego in /var/lib/opa/policies:         {{ 'ok' if hostvars['_facts_relay']['bastion_extravars_ok'] | default(false) else 'NOT ok' }}
+          maintenance_window.rego in /var/lib/opa/policies: {{ 'ok' if hostvars['_facts_relay']['bastion_maint_ok'] | default(false) else 'NOT ok' }}
+          OPA server reachable on bastion:8181:              {{ 'ok' if hostvars['_facts_relay']['bastion_opa_reachable'] | default(false) else 'NOT ok' }}
+          maintenance_window.rego patched to outside window: {{ 'ok' if hostvars['_facts_relay']['bastion_maint_window_excl_patched'] | default(false) else 'NOT ok' }}
+
+          [AAP policy enforcement tests]
+          Demo Job Template found (id={{ jt_id | default('NOT FOUND') }}): {{ 'ok' if jt_id | default('') | length > 0 else 'NOT ok' }}
+          prose-03 aap/deny blocks job execution:            {{ 'ok' if deny_policy_blocks | default(false) else 'NOT ok' }}
+          prose-04 aap/extravars blocks color=red:           {{ 'ok' if extravars_red_blocks | default(false) else 'NOT ok' }}
+          prose-05 aap/extravars allows color=blue:          {{ 'ok' if extravars_blue_allowed | default(false) else 'NOT ok' }}
+          prose-08 aap/maintenance + label allows (inside):  {{ 'ok' if maint_with_label_allowed | default(false) else 'NOT ok' }}
+          prose-09 aap/maintenance blocks (no label):        {{ 'ok' if maint_no_label_blocks | default(false) else 'NOT ok' }}
+          prose-10 aap/maintenance blocks (outside window):  {{ 'ok' if maint_outside_window_blocks | default(false) else 'NOT ok' }}
+
+          [Final Demo JT state]
+          opa_query_path = aap/maintenance:                  {{ 'ok' if final_opa_query_path | default('') == 'aap/maintenance' else 'NOT ok — value: ' ~ (final_opa_query_path | default('NOT SET')) }}
+          label "maintenance" present on Demo JT:            {{ 'ok' if final_label_maintenance | default(false) else 'NOT ok' }}
+
+          SKIPPED (visual/exploratory only):
+            prose-01: AAP login
+            prose-02: Read-only OPA settings view
+            prose-06: Open-ended exploration
+            prose-11: Open-ended exploration

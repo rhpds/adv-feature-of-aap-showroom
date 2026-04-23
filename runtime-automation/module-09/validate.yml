@@ -1,53 +1,56 @@
 ---
-# Module 09 Validate — Policy Enforcement
+# Module 09 Validate — Policy Enforcement (OPA)
 #
-# Checks durable outcomes of the OPA policy-enforcement lab:
-#   Task 1: deny.rego exists at /var/lib/opa/policies/
-#   Task 2: extra_vars.rego exists at /var/lib/opa/policies/
-#   Task 3: maintenance_window.rego exists at /var/lib/opa/policies/
-#   Task 4: OPA server reachable on bastion:8181 (HTTP 200 or 204 from /health)
-#   Task 5: Demo Job Template has a non-empty opa_query_path field configured
-#   Task 6: Demo Job Template has "maintenance" label associated (end-state)
-#   Task 7: maintenance_window.rego contains a window_start_hour value (file was patched)
+# What this playbook verifies:
+#   Task 1: deny.rego present in /var/lib/opa/policies/ on bastion
+#   Task 2: extra_vars.rego present in /var/lib/opa/policies/ on bastion
+#   Task 3: maintenance_window.rego present in /var/lib/opa/policies/ on bastion
+#   Task 4: OPA server reachable at http://localhost:8181/health on bastion (HTTP 200 or 204)
+#   Task 5: maintenance_window.rego has window_start_hour set (file was patched by student)
+#   Task 6: Demo Job Template has opa_query_path set to a non-empty value
+#   Task 7: Demo Job Template has "maintenance" label associated (final state)
 #   Task 8: Job history contains at least one policy-blocked (failed) job
-#   Task 9: Job history contains at least one allowed (successful) job
+#   Task 9: Job history contains at least one policy-allowed (successful) job
 #
-# Notes:
-#   - AAP 2.5 unified gateway: REST API base is /api/controller/v2/ (not /api/v2/)
-#   - OPA field on job template: opa_query_path (not "policy")
-#   - All file and OPA checks run on bastion (where OPA and the .rego files live)
-#   - AAP API calls are made from bastion via curl
+# Variable resolution: all connection vars come from environment via
+#   lookup('ansible.builtin.env', 'VAR_NAME')
+# Play 0: build bastion in-memory inventory
+# Play 1: bastion SSH checks (rego files, OPA health, window_start_hour)
+# Play 2: localhost AAP REST checks (JT config, labels, job history) + validation_check
 
-# -------------------------------------------------------
-# Play 0 — Build dynamic bastion inventory from extravars
-# -------------------------------------------------------
-- name: Build bastion inventory
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 0 — Build dynamic bastion inventory from environment variables
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 09 Validate — build bastion inventory
   hosts: localhost
   gather_facts: false
+  vars:
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
+
   tasks:
     - name: Add bastion to in-memory inventory
       ansible.builtin.add_host:
         name: bastion
         groups: bastion
-        ansible_host: "{{ bastion_host }}"
-        ansible_port: "{{ bastion_port | default(22) }}"
-        ansible_user: "{{ bastion_user | default('lab-user') }}"
-        ansible_password: "{{ bastion_password | default('') }}"
+        ansible_host: "{{ _ssh_host }}"
+        ansible_port: "{{ _ssh_port | int }}"
+        ansible_user: "{{ _ssh_user }}"
+        ansible_password: "{{ _ssh_pass }}"
         ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: bastion_host | default('') | length > 0
+      when: _ssh_host | length > 0
 
-# -------------------------------------------------------
-# Play 1 — Validation tasks run on bastion
-# -------------------------------------------------------
-- name: Module 09 Validation — OPA Policy Enforcement
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 1 — Bastion checks: rego files, OPA health, window_start_hour patch
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 09 Validate — bastion OPA checks
   hosts: bastion
   gather_facts: false
   vars:
-    aap_url: "{{ controller_url | default('') }}"
-    aap_user: "{{ controller_username | default('lab-user') }}"
-    aap_pass: "{{ controller_password | default('') }}"
-    opa_policy_dir: /var/lib/opa/policies
+    _opa_policy_dir: /var/lib/opa/policies
 
   tasks:
 
@@ -56,7 +59,7 @@
     # -------------------------------------------------------
     - name: Stat deny.rego
       ansible.builtin.stat:
-        path: "{{ opa_policy_dir }}/deny.rego"
+        path: "{{ _opa_policy_dir }}/deny.rego"
       register: r_deny_rego
       ignore_errors: true
 
@@ -65,7 +68,7 @@
     # -------------------------------------------------------
     - name: Stat extra_vars.rego
       ansible.builtin.stat:
-        path: "{{ opa_policy_dir }}/extra_vars.rego"
+        path: "{{ _opa_policy_dir }}/extra_vars.rego"
       register: r_extravars_rego
       ignore_errors: true
 
@@ -74,7 +77,7 @@
     # -------------------------------------------------------
     - name: Stat maintenance_window.rego
       ansible.builtin.stat:
-        path: "{{ opa_policy_dir }}/maintenance_window.rego"
+        path: "{{ _opa_policy_dir }}/maintenance_window.rego"
       register: r_maint_rego
       ignore_errors: true
 
@@ -89,14 +92,14 @@
       ignore_errors: true
 
     # -------------------------------------------------------
-    # Task 7 — maintenance_window.rego has a window_start_hour line (patched by student)
-    # Read early so result is available for set_fact block below
+    # Task 5 — maintenance_window.rego has window_start_hour set (student patched it)
+    # Read line value so we can report the actual hour in pass_msg
     # -------------------------------------------------------
     - name: Read window_start_hour from maintenance_window.rego
       ansible.builtin.shell: |
-        if grep -qE "^window_start_hour\s*:=" "{{ opa_policy_dir }}/maintenance_window.rego" 2>/dev/null; then
-          grep -oE "^window_start_hour\s*:=\s*[0-9]+" "{{ opa_policy_dir }}/maintenance_window.rego" | \
-            grep -oE "[0-9]+" | head -1
+        if grep -qE "^window_start_hour\s*:=" "{{ _opa_policy_dir }}/maintenance_window.rego" 2>/dev/null; then
+          grep -oE "^window_start_hour\s*:=\s*[0-9]+" "{{ _opa_policy_dir }}/maintenance_window.rego" \
+            | grep -oE "[0-9]+" | head -1
         else
           echo "NOT_FOUND"
         fi
@@ -106,136 +109,194 @@
       when: r_maint_rego.stat.exists | default(false)
 
     # -------------------------------------------------------
-    # Discover Demo Job Template ID and opa_query_path field
-    # Output: two lines — "JT_ID:<n>" and "JT_POLICY:<value>"
+    # Build bastion task facts and persist them to hostvars
     # -------------------------------------------------------
-    - name: Get Demo Job Template ID and opa_query_path from AAP API
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/controller/v2/job_templates/?name=Demo+Job+Template" \
-          -H "Content-Type: application/json" | \
-          python3 -c "
-        import json, sys
-        d = json.load(sys.stdin)
-        results = d.get('results', [])
-        if not results:
-            print('JT_ID:NOT_FOUND')
-            print('JT_POLICY:')
-        else:
-            jt = results[0]
-            print('JT_ID:' + str(jt.get('id', 'NOT_FOUND')))
-            print('JT_POLICY:' + str(jt.get('opa_query_path', '') or ''))
-        "
-      register: r_jt_info
-      changed_when: false
-      ignore_errors: true
-
-    - name: Parse Demo Job Template ID
+    - name: Build bastion task result facts
       ansible.builtin.set_fact:
-        jt_id: "{{ (r_jt_info.stdout_lines | default([]) | select('match', '^JT_ID:') | list | first | default('JT_ID:NOT_FOUND'))[6:] }}"
-
-    - name: Parse Demo Job Template opa_query_path
-      ansible.builtin.set_fact:
-        jt_policy: "{{ (r_jt_info.stdout_lines | default([]) | select('match', '^JT_POLICY:') | list | first | default('JT_POLICY:'))[10:] }}"
-
-    # -------------------------------------------------------
-    # Task 5 — check opa_query_path field is non-empty (done via jt_policy fact above)
-    # Task 6 — Demo Job Template has "maintenance" label associated
-    # -------------------------------------------------------
-    - name: Get labels associated with Demo Job Template
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/labels/" \
-          -H "Content-Type: application/json" | \
-          python3 -c "
-        import json, sys
-        d = json.load(sys.stdin)
-        names = [r.get('name', '') for r in d.get('results', [])]
-        print('LABEL_MAINT:yes' if 'maintenance' in names else 'LABEL_MAINT:no')
-        "
-      register: r_labels
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    # -------------------------------------------------------
-    # Tasks 8 and 9 — Job history: look at the 50 most recent jobs on Demo Job Template
-    # Count failed (policy-blocked) and successful (policy-allowed) jobs
-    # -------------------------------------------------------
-    - name: Query recent jobs on Demo Job Template
-      ansible.builtin.shell: |
-        curl -sk -u "{{ aap_user }}:{{ aap_pass }}" \
-          "{{ aap_url }}/api/controller/v2/job_templates/{{ jt_id }}/jobs/?order_by=-id&page_size=50" \
-          -H "Content-Type: application/json" | \
-          python3 -c "
-        import json, sys
-        d = json.load(sys.stdin)
-        jobs = d.get('results', [])
-        failed  = sum(1 for j in jobs if j.get('status') in ['failed', 'error'])
-        success = sum(1 for j in jobs if j.get('status') == 'successful')
-        print('JOB_FAILED:' + str(failed))
-        print('JOB_SUCCESS:' + str(success))
-        print('JOB_TOTAL:' + str(len(jobs)))
-        "
-      register: r_jobs
-      changed_when: false
-      ignore_errors: true
-      when: jt_id != 'NOT_FOUND'
-
-    - name: Parse job counts
-      ansible.builtin.set_fact:
-        job_failed_count:  "{{ (r_jobs.stdout_lines | default([]) | select('match', '^JOB_FAILED:')  | list | first | default('JOB_FAILED:0'))[11:]  | int }}"
-        job_success_count: "{{ (r_jobs.stdout_lines | default([]) | select('match', '^JOB_SUCCESS:') | list | first | default('JOB_SUCCESS:0'))[12:] | int }}"
-      when: jt_id != 'NOT_FOUND'
-
-    # -------------------------------------------------------
-    # Build all result facts
-    # -------------------------------------------------------
-    - name: Build task result facts
-      ansible.builtin.set_fact:
-        _task1_ok: "{{ r_deny_rego.stat.exists | default(false) | bool }}"
-        _task2_ok: "{{ r_extravars_rego.stat.exists | default(false) | bool }}"
-        _task3_ok: "{{ r_maint_rego.stat.exists | default(false) | bool }}"
-        _task4_ok: "{{ (r_opa_health.stdout | default('000') | trim) in ['200', '204'] }}"
-        _task5_ok: "{{ jt_id != 'NOT_FOUND' and (jt_policy | default('')) | length > 0 }}"
-        _task6_ok: "{{ ('LABEL_MAINT:yes' in (r_labels.stdout | default(''))) }}"
-        _task7_ok: >-
+        bastion_task1_ok: "{{ r_deny_rego.stat.exists | default(false) | bool }}"
+        bastion_task2_ok: "{{ r_extravars_rego.stat.exists | default(false) | bool }}"
+        bastion_task3_ok: "{{ r_maint_rego.stat.exists | default(false) | bool }}"
+        bastion_task4_ok: "{{ (r_opa_health.stdout | default('000') | trim) in ['200', '204'] }}"
+        bastion_task5_ok: >-
           {{
             (r_maint_rego.stat.exists | default(false) | bool)
             and (r_window_start.stdout | default('NOT_FOUND') | trim) != 'NOT_FOUND'
             and (r_window_start.stdout | default('') | trim) | length > 0
           }}
-        _task8_ok: "{{ (job_failed_count  | default(0) | int) >= 1 }}"
-        _task9_ok: "{{ (job_success_count | default(0) | int) >= 1 }}"
+        bastion_window_start_hour: "{{ r_window_start.stdout | default('?') | trim }}"
+        bastion_opa_http_code: "{{ r_opa_health.stdout | default('000') | trim }}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Play 2 — Localhost AAP REST checks and final rhpds.ftl.validation_check
+# ─────────────────────────────────────────────────────────────────────────────
+- name: Module 09 Validate — AAP checks and final result
+  hosts: localhost
+  gather_facts: false
+  vars:
+    _aap_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/$', '') }}"
+    _aap_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+    _aap_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+    _api: "{{ _aap_url }}/api/controller/v2"
+    _opa_policy_dir: /var/lib/opa/policies
+
+  tasks:
 
     # -------------------------------------------------------
-    # Validate all tasks
+    # Pull bastion facts from hostvars
+    # -------------------------------------------------------
+    - name: Pull bastion check results into localhost
+      ansible.builtin.set_fact:
+        _task1_ok: "{{ hostvars['bastion']['bastion_task1_ok'] | default(false) | bool }}"
+        _task2_ok: "{{ hostvars['bastion']['bastion_task2_ok'] | default(false) | bool }}"
+        _task3_ok: "{{ hostvars['bastion']['bastion_task3_ok'] | default(false) | bool }}"
+        _task4_ok: "{{ hostvars['bastion']['bastion_task4_ok'] | default(false) | bool }}"
+        _task5_ok: "{{ hostvars['bastion']['bastion_task5_ok'] | default(false) | bool }}"
+        _window_start_hour: "{{ hostvars['bastion']['bastion_window_start_hour'] | default('?') }}"
+        _opa_http_code: "{{ hostvars['bastion']['bastion_opa_http_code'] | default('000') }}"
+
+    # -------------------------------------------------------
+    # Task 6 — Demo Job Template has opa_query_path set (non-empty)
+    # Also discover JT ID for subsequent label and job history checks
+    # -------------------------------------------------------
+    - name: Query Demo Job Template from AAP API
+      ansible.builtin.uri:
+        url: "{{ _api }}/job_templates/?name=Demo+Job+Template"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 15
+        status_code: [200]
+        return_content: true
+      register: r_jt
+      ignore_errors: true
+
+    - name: Set JT facts (ID and opa_query_path)
+      ansible.builtin.set_fact:
+        _jt_id: "{{ (r_jt.json.results | default([]) | map(attribute='id') | list | first) | default('') | string }}"
+        _jt_policy: "{{ (r_jt.json.results | default([]) | map(attribute='opa_query_path') | list | first) | default('') | string }}"
+        _jt_found: "{{ (r_jt.json.count | default(0) | int) > 0 }}"
+
+    - name: Set task-6 fact (opa_query_path non-empty)
+      ansible.builtin.set_fact:
+        _task6_ok: "{{ _jt_found | bool and (_jt_policy | trim | length) > 0 }}"
+
+    # -------------------------------------------------------
+    # Task 7 — Demo Job Template has "maintenance" label associated
+    # -------------------------------------------------------
+    - name: Query labels on Demo Job Template
+      ansible.builtin.uri:
+        url: "{{ _api }}/job_templates/{{ _jt_id }}/labels/"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 15
+        status_code: [200]
+        return_content: true
+      register: r_labels
+      ignore_errors: true
+      when: _jt_id | length > 0
+
+    - name: Set task-7 fact ("maintenance" label present)
+      ansible.builtin.set_fact:
+        _task7_ok: >-
+          {{
+            r_labels is defined
+            and r_labels is not skipped
+            and r_labels.status | default(0) == 200
+            and (r_labels.json.results | default([])
+                  | selectattr('name', 'equalto', 'maintenance')
+                  | list | length) > 0
+          }}
+
+    - name: Default task-7 when JT not found
+      ansible.builtin.set_fact:
+        _task7_ok: false
+      when: r_labels is not defined or r_labels is skipped
+
+    # -------------------------------------------------------
+    # Tasks 8 and 9 — Job history on Demo Job Template:
+    #   at least 1 failed (policy-blocked) and 1 successful (policy-allowed)
+    # -------------------------------------------------------
+    - name: Query recent jobs on Demo Job Template
+      ansible.builtin.uri:
+        url: "{{ _api }}/job_templates/{{ _jt_id }}/jobs/?order_by=-id&page_size=50"
+        method: GET
+        url_username: "{{ _aap_user }}"
+        url_password: "{{ _aap_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 15
+        status_code: [200]
+        return_content: true
+      register: r_jobs
+      ignore_errors: true
+      when: _jt_id | length > 0
+
+    - name: Parse job counts (failed and successful)
+      ansible.builtin.set_fact:
+        _job_failed_count: >-
+          {{
+            r_jobs.json.results | default([])
+            | selectattr('status', 'in', ['failed', 'error'])
+            | list | length
+          }}
+        _job_success_count: >-
+          {{
+            r_jobs.json.results | default([])
+            | selectattr('status', 'equalto', 'successful')
+            | list | length
+          }}
+      when: r_jobs is defined and r_jobs is not skipped and r_jobs.status | default(0) == 200
+
+    - name: Default job counts when query skipped
+      ansible.builtin.set_fact:
+        _job_failed_count: 0
+        _job_success_count: 0
+      when: r_jobs is not defined or r_jobs is skipped
+
+    - name: Set tasks 8 and 9 facts
+      ansible.builtin.set_fact:
+        _task8_ok: "{{ (_job_failed_count | int) >= 1 }}"
+        _task9_ok: "{{ (_job_success_count | int) >= 1 }}"
+
+    # -------------------------------------------------------
+    # Final rhpds.ftl.validation_check
     # -------------------------------------------------------
     - name: Validate all tasks
-      validation_check:
+      rhpds.ftl.validation_check:
         check: >-
           {{
-            _task1_ok and _task2_ok and _task3_ok and _task4_ok
-            and _task5_ok and _task6_ok and _task7_ok
-            and _task8_ok and _task9_ok
+            _task1_ok | bool
+            and _task2_ok | bool
+            and _task3_ok | bool
+            and _task4_ok | bool
+            and _task5_ok | bool
+            and _task6_ok | bool
+            and _task7_ok | bool
+            and _task8_ok | bool
+            and _task9_ok | bool
           }}
         pass_msg: |
-          Task 1: deny.rego present in /var/lib/opa/policies/
-          Task 2: extra_vars.rego present in /var/lib/opa/policies/
-          Task 3: maintenance_window.rego present in /var/lib/opa/policies/
-          Task 4: OPA server reachable on bastion:8181
-          Task 5: Demo Job Template has OPA policy enforcement configured (opa_query_path={{ jt_policy | default('') }})
-          Task 6: Demo Job Template has "maintenance" label associated
-          Task 7: maintenance_window.rego window_start_hour = {{ r_window_start.stdout | default('?') | trim }}
-          Task 8: Job history has at least one policy-blocked (failed) job
-          Task 9: Job history has at least one policy-allowed (successful) job
+          Task 1: deny.rego present in {{ _opa_policy_dir }}/
+          Task 2: extra_vars.rego present in {{ _opa_policy_dir }}/
+          Task 3: maintenance_window.rego present in {{ _opa_policy_dir }}/
+          Task 4: OPA server reachable on bastion:8181 (HTTP {{ _opa_http_code }})
+          Task 5: maintenance_window.rego patched — window_start_hour = {{ _window_start_hour }}
+          Task 6: Demo Job Template opa_query_path = {{ _jt_policy }}
+          Task 7: Demo Job Template has "maintenance" label associated
+          Task 8: Job history has at least one policy-blocked (failed) job (found {{ _job_failed_count }})
+          Task 9: Job history has at least one policy-allowed (successful) job (found {{ _job_success_count }})
         error_msg: |
-          {{ 'Task 1: deny.rego present' if _task1_ok else 'Task 1: FAILED — deny.rego missing from ' + opa_policy_dir + '. Run Solve or clone opa-policy-enforcement and copy *.rego to ' + opa_policy_dir + '.' }}
-          {{ 'Task 2: extra_vars.rego present' if _task2_ok else 'Task 2: FAILED — extra_vars.rego missing from ' + opa_policy_dir + '. Run Solve or clone opa-policy-enforcement and copy *.rego to ' + opa_policy_dir + '.' }}
-          {{ 'Task 3: maintenance_window.rego present' if _task3_ok else 'Task 3: FAILED — maintenance_window.rego missing from ' + opa_policy_dir + '. Run Solve or clone opa-policy-enforcement and copy *.rego to ' + opa_policy_dir + '.' }}
-          {{ 'Task 4: OPA server reachable on :8181' if _task4_ok else 'Task 4: FAILED — OPA health returned HTTP ' + (r_opa_health.stdout | default('000') | trim) + '. Check OPA service on bastion: sudo systemctl status opa' }}
-          {{ 'Task 5: Demo Job Template opa_query_path=' + (jt_policy | default('')) if _task5_ok else 'Task 5: FAILED — Demo Job Template not found or opa_query_path is empty. In the AAP UI open Demo Job Template -> Edit, set the OPA Query Path field to aap/deny (or aap/extravars, aap/maintenance) and save.' }}
-          {{ 'Task 6: "maintenance" label associated with Demo Job Template' if _task6_ok else 'Task 6: FAILED — "maintenance" label not found on Demo Job Template. In the AAP UI open Demo Job Template -> Labels, add the "maintenance" label and save.' }}
-          {{ 'Task 7: maintenance_window.rego window_start_hour = ' + (r_window_start.stdout | default('?') | trim) if _task7_ok else 'Task 7: FAILED — window_start_hour not set in maintenance_window.rego. Edit ' + opa_policy_dir + '/maintenance_window.rego and add: window_start_hour := <UTC hour>' }}
-          {{ 'Task 8: at least one policy-blocked job in history' if _task8_ok else 'Task 8: FAILED — No failed jobs on Demo Job Template. Set opa_query_path to aap/deny and launch the template; OPA should block it and record a failed job.' }}
-          {{ 'Task 9: at least one allowed (successful) job in history' if _task9_ok else 'Task 9: FAILED — No successful jobs on Demo Job Template. Set opa_query_path to aap/extravars with extra_vars color=blue and launch; OPA should allow the job to run.' }}
+          {{ '✅' if _task1_ok | bool else '❌' }} Task 1: deny.rego {{ 'present in ' + _opa_policy_dir if _task1_ok | bool else 'MISSING — clone opa-policy-enforcement repo and copy *.rego to ' + _opa_policy_dir + ' on bastion, or run Solve' }}
+          {{ '✅' if _task2_ok | bool else '❌' }} Task 2: extra_vars.rego {{ 'present in ' + _opa_policy_dir if _task2_ok | bool else 'MISSING — clone opa-policy-enforcement repo and copy *.rego to ' + _opa_policy_dir + ' on bastion, or run Solve' }}
+          {{ '✅' if _task3_ok | bool else '❌' }} Task 3: maintenance_window.rego {{ 'present in ' + _opa_policy_dir if _task3_ok | bool else 'MISSING — clone opa-policy-enforcement repo and copy *.rego to ' + _opa_policy_dir + ' on bastion, or run Solve' }}
+          {{ '✅' if _task4_ok | bool else '❌' }} Task 4: OPA server health {{ 'OK (HTTP ' + _opa_http_code + ')' if _task4_ok | bool else 'FAILED (HTTP ' + _opa_http_code + ') — check OPA service on bastion: sudo systemctl status opa' }}
+          {{ '✅' if _task5_ok | bool else '❌' }} Task 5: maintenance_window.rego {{ 'patched (window_start_hour = ' + _window_start_hour + ')' if _task5_ok | bool else 'NOT patched — edit ' + _opa_policy_dir + '/maintenance_window.rego, set window_start_hour := <UTC hour>, or run Solve' }}
+          {{ '✅' if _task6_ok | bool else '❌' }} Task 6: Demo Job Template opa_query_path {{ '= ' + _jt_policy if _task6_ok | bool else 'is empty or not set — open AAP > Automation Execution > Templates > Demo Job Template, set OPA Query Path to aap/maintenance and save' }}
+          {{ '✅' if _task7_ok | bool else '❌' }} Task 7: "maintenance" label {{ 'associated with Demo Job Template' if _task7_ok | bool else 'NOT associated — open Demo Job Template, add the "maintenance" label and save' }}
+          {{ '✅' if _task8_ok | bool else '❌' }} Task 8: Policy-blocked (failed) jobs {{ 'found (' + (_job_failed_count | string) + ')' if _task8_ok | bool else 'NOT found — set opa_query_path to aap/deny and launch the template; OPA should block it and record a failed job' }}
+          {{ '✅' if _task9_ok | bool else '❌' }} Task 9: Policy-allowed (successful) jobs {{ 'found (' + (_job_success_count | string) + ')' if _task9_ok | bool else 'NOT found — set opa_query_path to aap/extravars with extra_vars color=blue and launch; OPA should allow the job to complete successfully' }}

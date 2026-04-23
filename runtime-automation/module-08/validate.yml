@@ -1,50 +1,44 @@
 ---
-# Module 08 Validate — The new Self-Service Automation Portal (SSAP)
+# Module 08 Validate — Self-Service Automation Portal (SSAP)
 #
 # What this playbook verifies:
-#   task-01: AAP OAuth app "Selfservice-*" exists with authorization_grant_type=authorization-code,
-#            client_type=confidential in org Default
+#   task-01: AAP OAuth app "Selfservice-*" exists with
+#            authorization_grant_type=authorization-code, client_type=confidential
 #   task-02: AAP team "aap-admins" exists in org Default
-#   task-03: SSAP portal accessible (HTTP 200 or 302)
+#   task-03: SSAP portal is accessible (HTTP 200 or 302)
 #   task-04: AAP "Demo Job Template" description == "Say hello to the world"
 #   task-05: SSAP catalog contains "Manage RHEL Time Servers" template
-#            (checked via Playwright — RHDH catalog API requires Backstage Bearer token)
+#            (verified via rhpds.ftl.playwright_task — Backstage catalog requires auth)
+#
+# Variable resolution: ALL env lookups use lookup('ansible.builtin.env', 'VAR_NAME').
+# No bare extravars. No guid-derived URLs.
+# API base: /api/controller/v2/ (AAP 2.5 unified gateway)
 
 - name: Module 08 Validation — Self-Service Automation Portal
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    student_user: "{{ user | default('') }}"
-    controller_url: "{{ controller_url | default('') }}"
-    controller_username: "{{ controller_username | default('') }}"
-    controller_password: "{{ controller_password | default('') }}"
-    guid: "{{ guid | default('') }}"
-    # AAP API base — AAP 2.5 uses /api/controller/v2/ (not /api/v2/)
-    aap_api: "{{ controller_url | regex_replace('/$', '') }}/api/controller/v2"
-    # ssap_url is NOT declared here — extravars may or may not include it.
-    # _ssap_url is computed via set_fact in the first task below.
+    student_user:         "{{ user | default('') }}"
+    _controller_url:      "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
+    _controller_username: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+    _controller_password: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+    _ssap_url:            "{{ lookup('ansible.builtin.env', 'SSAP_URL') }}"
+    _aap_api:             "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/$', '') }}/api/controller/v2"
 
   tasks:
 
-    # Derive effective SSAP URL from guid (ssap_url is not in user_data.yml extravars).
-    - name: Set effective SSAP URL derived from guid
-      ansible.builtin.set_fact:
-        _ssap_url: "https://ssap-portal-{{ guid }}.apps.ocpvdev01.rhdp.net"
-
     # -------------------------------------------------------
     # Check 1 — AAP OAuth app "Selfservice-*" exists with
-    #            authorization_grant_type=authorization-code,
-    #            client_type=confidential in org Default
-    # Note: In AAP 2.5 the applications endpoint is
-    #       /api/controller/v2/applications/ (not /o/applications/)
+    #            authorization_grant_type=authorization-code
+    #            and client_type=confidential in org Default
     # -------------------------------------------------------
     - name: Query AAP OAuth applications named Selfservice-*
       ansible.builtin.uri:
-        url: "{{ aap_api }}/applications/?name__startswith=Selfservice"
+        url: "{{ _aap_api }}/applications/?name__startswith=Selfservice"
         method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
+        url_username: "{{ _controller_username }}"
+        url_password: "{{ _controller_password }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 10
@@ -71,25 +65,12 @@
     # -------------------------------------------------------
     # Check 2 — AAP team "aap-admins" exists in org Default
     # -------------------------------------------------------
-    - name: Query AAP for team named aap-admins
+    - name: Query org Default ID
       ansible.builtin.uri:
-        url: "{{ aap_api }}/teams/?name=aap-admins"
+        url: "{{ _aap_api }}/organizations/?name=Default"
         method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
-        force_basic_auth: true
-        validate_certs: false
-        timeout: 10
-        status_code: [200]
-      register: r_team
-      ignore_errors: true
-
-    - name: Query org Default ID (for team org validation)
-      ansible.builtin.uri:
-        url: "{{ aap_api }}/organizations/?name=Default"
-        method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
+        url_username: "{{ _controller_username }}"
+        url_password: "{{ _controller_password }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 10
@@ -101,7 +82,20 @@
       ansible.builtin.set_fact:
         _default_org_id: "{{ (r_org.json.results | default([]) | first).id | default(-1) }}"
 
-    - name: Verify team aap-admins is in org Default
+    - name: Query AAP for team named aap-admins
+      ansible.builtin.uri:
+        url: "{{ _aap_api }}/teams/?name=aap-admins"
+        method: GET
+        url_username: "{{ _controller_username }}"
+        url_password: "{{ _controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        timeout: 10
+        status_code: [200]
+      register: r_team
+      ignore_errors: true
+
+    - name: Set team aap-admins check fact
       ansible.builtin.set_fact:
         _task2_ok: >-
           {{
@@ -141,10 +135,10 @@
     # -------------------------------------------------------
     - name: Query Demo Job Template from AAP
       ansible.builtin.uri:
-        url: "{{ aap_api }}/job_templates/?name=Demo+Job+Template"
+        url: "{{ _aap_api }}/job_templates/?name=Demo+Job+Template"
         method: GET
-        user: "{{ controller_username }}"
-        password: "{{ controller_password }}"
+        url_username: "{{ _controller_username }}"
+        url_password: "{{ _controller_password }}"
         force_basic_auth: true
         validate_certs: false
         timeout: 10
@@ -158,139 +152,70 @@
           {{
             r_demo_jt.status | default(0) == 200
             and (r_demo_jt.json.count | default(0) | int) > 0
-            and (r_demo_jt.json.results | default([]) | map(attribute='description') | list | first | default(''))
-                == 'Say hello to the world'
+            and (
+              r_demo_jt.json.results
+              | default([])
+              | map(attribute='description')
+              | list
+              | first
+              | default('')
+            ) == 'Say hello to the world'
           }}
 
     # -------------------------------------------------------
     # Check 5 — SSAP catalog contains "Manage RHEL Time Servers"
-    # RHDH (Red Hat Developer Hub 1.8.5 / Backstage 1.42.5) requires
-    # a Backstage Bearer token for catalog API access. Playwright is
-    # used to sign in via AAP OAuth and capture the token from
-    # outgoing API requests, then use it directly.
-    #
-    # Template name in catalog: rhel-update-time-servers-dynamic
-    # Template title: "Manage RHEL Time Servers" (with emoji prefix)
+    # Uses rhpds.ftl.playwright_task to sign in via AAP OAuth
+    # and verify the template is visible in the catalog.
     # -------------------------------------------------------
     - name: "Playwright — check SSAP catalog for Manage RHEL Time Servers template"
-      ansible.builtin.command:
-        argv:
-          - node
-          - -e
-          - |
-            const {chromium} = require('playwright');
-            (async () => {
-              const ssapUrl = `{{ _ssap_url }}`;
-              const aapUser = `{{ controller_username }}`;
-              const aapPass = `{{ controller_password }}`;
-
-              const b = await chromium.launch({
-                headless: true,
-                args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-setuid-sandbox']
-              });
-              const ctx = await b.newContext({ignoreHTTPSErrors: true});
-              const p = await ctx.newPage();
-
-              // Capture Backstage Bearer token from outgoing API requests
-              let backstageToken = null;
-              p.on('request', req => {
-                const h = req.headers();
-                if (h['authorization'] && h['authorization'].startsWith('Bearer ') && !backstageToken) {
-                  backstageToken = h['authorization'];
-                }
-              });
-
-              // Navigate to SSAP catalog — use networkidle for SPA render
-              await p.goto(`${ssapUrl}/self-service/catalog`, {waitUntil: 'networkidle', timeout: 60000});
-
-              // Sign in if the Sign In button is visible
-              const signInBtn = p.getByRole('button', {name: /sign in/i});
-              if (await signInBtn.isVisible({timeout: 25000}).catch(() => false)) {
-                await signInBtn.click();
-                await p.waitForTimeout(3000);
-
-                // AAP Gateway login: input[type="text"] for username, input[type="password"] for password
-                const usernameInput = p.locator('input[type="text"]').first();
-                if (await usernameInput.isVisible({timeout: 10000}).catch(() => false)) {
-                  await usernameInput.fill(aapUser);
-                  await p.locator('input[type="password"]').first().fill(aapPass);
-                  await p.getByRole('button', {name: /log in/i}).first().click();
-                  await p.waitForTimeout(5000);
-                }
-
-                // OAuth consent page
-                const authorizeBtn = p.getByRole('button', {name: /authorize/i});
-                if (await authorizeBtn.isVisible({timeout: 8000}).catch(() => false)) {
-                  await authorizeBtn.click();
-                  await p.waitForTimeout(4000);
-                }
-              }
-
-              // Wait for SSAP catalog to fully load and token to be captured
-              await p.waitForURL(/self-service\/catalog/, {timeout: 30000}).catch(() => {});
-              await p.waitForTimeout(4000);
-
-              // If token not captured yet, reload to trigger API calls
-              if (!backstageToken) {
-                await p.reload({waitUntil: 'networkidle', timeout: 30000});
-                await p.waitForTimeout(3000);
-              }
-
-              if (backstageToken) {
-                // Use Backstage Bearer token to query catalog API
-                const apiUrl = `${ssapUrl}/api/catalog/entities?filter=kind%3Dtemplate`;
-                const response = await p.evaluate(async ({url, tok}) => {
-                  const r = await fetch(url, {
-                    headers: {'Authorization': tok, 'Accept': 'application/json'}
-                  });
-                  const text = await r.text();
-                  return {status: r.status, body: text};
-                }, {url: apiUrl, tok: backstageToken});
-
-                console.log('CATALOG_API_STATUS:' + response.status);
-
-                if (response.status === 200) {
-                  const found = response.body.includes('Manage RHEL Time Servers') ||
-                                response.body.includes('rhel-update-time-servers-dynamic');
-                  console.log(found ? 'TEMPLATE_FOUND:true' : 'TEMPLATE_FOUND:false');
-                } else {
-                  console.log('TEMPLATE_FOUND:false');
-                  console.log('API_ERROR:' + response.body.substring(0, 200));
-                }
-              } else {
-                // Fallback: check page content after full render
-                await p.goto(`${ssapUrl}/self-service/catalog`, {waitUntil: 'networkidle', timeout: 30000});
-                await p.waitForTimeout(4000);
-                const pageContent = await p.content();
-                const foundOnPage = pageContent.includes('Manage RHEL Time Servers') ||
-                                    pageContent.includes('rhel-update-time-servers-dynamic');
-                console.log('CATALOG_API_STATUS:0');
-                console.log(foundOnPage ? 'TEMPLATE_FOUND_ON_PAGE:true' : 'TEMPLATE_FOUND_ON_PAGE:false');
-              }
-
-              await p.screenshot({path: '/tmp/playwright-evidence-module08.png', fullPage: false});
-              await b.close();
-            })().catch(e => {
-              console.error('FAILED:', e.message);
-              process.exit(1);
-            });
-      environment:
-        PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
-      register: r_playwright_catalog
+      rhpds.ftl.playwright_task:
+        intent: >-
+          Open the SSAP portal catalog at {{ _ssap_url }}/self-service/catalog.
+          If a Sign In button is visible, click it and complete the AAP OAuth flow
+          using username={{ _controller_username }} and the corresponding password.
+          After authentication, confirm that a catalog card or item titled
+          "Manage RHEL Time Servers" is visible on the page.
+          Take a screenshot as evidence.
+        url: "{{ _ssap_url }}/self-service/catalog"
+        steps:
+          - action: goto
+            selector: "{{ _ssap_url }}/self-service/catalog"
+            wait_for: networkidle
+          - action: click
+            selector: "role=button[name=/sign in/i]"
+            optional: true
+          - action: fill
+            selector: "input[type='text']"
+            value: "{{ _controller_username }}"
+            optional: true
+          - action: fill
+            selector: "input[type='password']"
+            value: "{{ _controller_password }}"
+            optional: true
+          - action: click
+            selector: "role=button[name=/log in/i]"
+            optional: true
+          - action: click
+            selector: "role=button[name=/authorize/i]"
+            optional: true
+          - action: wait
+            timeout: 5000
+          - action: wait_for_text
+            text: "Manage RHEL Time Servers"
+            timeout: 30000
+          - action: screenshot
+            path: /tmp/playwright-evidence-module08-catalog.png
+      register: r_pw_catalog
       ignore_errors: true
 
     - name: Set SSAP catalog template check fact
       ansible.builtin.set_fact:
         _task5_ok: >-
           {{
-            r_playwright_catalog is defined
-            and r_playwright_catalog is not failed
-            and r_playwright_catalog is not skipped
-            and r_playwright_catalog.rc | default(1) == 0
-            and (
-              'TEMPLATE_FOUND:true' in (r_playwright_catalog.stdout | default(''))
-              or 'TEMPLATE_FOUND_ON_PAGE:true' in (r_playwright_catalog.stdout | default(''))
-            )
+            r_pw_catalog is defined
+            and r_pw_catalog is not failed
+            and r_pw_catalog is not skipped
+            and r_pw_catalog.rc | default(1) == 0
           }}
 
     # -------------------------------------------------------
@@ -305,17 +230,17 @@
         _task5_ok: "{{ _task5_ok | default(false) }}"
 
     - name: Validate all tasks
-      validation_check:
+      rhpds.ftl.validation_check:
         check: "{{ _task1_ok and _task2_ok and _task3_ok and _task4_ok and _task5_ok }}"
         pass_msg: |
           Task 1: AAP OAuth app Selfservice-* exists with authorization_grant_type=authorization-code and client_type=confidential
           Task 2: AAP team aap-admins exists in org Default
-          Task 3: SSAP portal is accessible
+          Task 3: SSAP portal is accessible (HTTP 200/302)
           Task 4: Demo Job Template description is "Say hello to the world"
-          Task 5: SSAP catalog contains "Manage RHEL Time Servers" custom template
+          Task 5: "Manage RHEL Time Servers" template is visible in the SSAP catalog
         error_msg: |
-          {{ 'OK' if _task1_ok else 'FAILED' }} Task 1: AAP OAuth app Selfservice-* {{ 'found with correct settings' if _task1_ok else 'not found or missing authorization_grant_type=authorization-code / client_type=confidential — open AAP Access Management > OAuth Applications and confirm the Selfservice-* app exists' }}
-          {{ 'OK' if _task2_ok else 'FAILED' }} Task 2: AAP team aap-admins {{ 'exists in org Default' if _task2_ok else 'missing — open AAP Access Management > Teams and create a team named aap-admins in the Default organization' }}
-          {{ 'OK' if _task3_ok else 'FAILED' }} Task 3: SSAP portal {{ 'is reachable' if _task3_ok else 'is not responding — check that the SSAP service is running or use the SSAP tab in Showroom' }}
-          {{ 'OK' if _task4_ok else 'FAILED' }} Task 4: Demo Job Template description {{ 'is set correctly' if _task4_ok else 'is wrong or missing — open AAP > Automation Execution > Templates > Demo Job Template, set Description to "Say hello to the world" and save' }}
-          {{ 'OK' if _task5_ok else 'FAILED' }} Task 5: "Manage RHEL Time Servers" template {{ 'found in SSAP catalog' if _task5_ok else 'not in SSAP catalog — open SSAP, click Add Template, paste the Gitea URL for rhel_dynamic.yml, click Analyze then Import' }}
+          {{ 'OK' if _task1_ok else 'FAILED' }} Task 1: AAP OAuth app Selfservice-* {{ 'found with correct grant type and client type' if _task1_ok else 'not found or missing authorization_grant_type=authorization-code / client_type=confidential — open AAP Access Management > OAuth Applications and confirm the Selfservice-* app exists with those settings' }}
+          {{ 'OK' if _task2_ok else 'FAILED' }} Task 2: AAP team aap-admins {{ 'exists in org Default' if _task2_ok else 'missing from org Default — open AAP Access Management > Teams and create a team named aap-admins inside the Default organization' }}
+          {{ 'OK' if _task3_ok else 'FAILED' }} Task 3: SSAP portal {{ 'is reachable' if _task3_ok else 'is not responding — verify the SSAP_URL environment variable is correct and the SSAP service is running' }}
+          {{ 'OK' if _task4_ok else 'FAILED' }} Task 4: Demo Job Template description {{ 'is set correctly' if _task4_ok else 'is wrong or blank — open AAP > Automation Execution > Templates > Demo Job Template, set the Description field to "Say hello to the world" and save' }}
+          {{ 'OK' if _task5_ok else 'FAILED' }} Task 5: "Manage RHEL Time Servers" template {{ 'is visible in the SSAP catalog' if _task5_ok else 'not found in SSAP catalog — open SSAP, click Add Template, paste the Gitea raw URL for rhel_dynamic.yml, click Analyze then Import' }}
