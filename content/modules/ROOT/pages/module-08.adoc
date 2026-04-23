@@ -166,3 +166,18 @@ In this chapter, you've learned how to:
 * How to import and use custom templates
 
 The Self-Server Portal gives you much more capabilities in designing a catalog for less technical users and to simplify and improve the user experience.
+
+ifeval::["{run_e2e_load_test}" == "true"]
+=====
+.End-to-End Validation (RHDP Only) ✅
+[%collapsible]
+====
+++++
+<div class="solve-button-placeholder" data-module="module-08"></div>
+++++
+++++
+<div class="validate-button-placeholder" data-module="module-08"></div>
+++++
+====
+=====
+endif::[]

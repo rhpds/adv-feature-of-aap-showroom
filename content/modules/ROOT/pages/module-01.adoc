@@ -72,3 +72,18 @@ Two main things are to be noted:
 . When we refer to a blue button, it might be hidden behind the 3 dots menu (highlighted in red)
 
 Now, you're ready for the lab!
+
+ifeval::["{run_e2e_load_test}" == "true"]
+=====
+.End-to-End Validation (RHDP Only) ✅
+[%collapsible]
+====
+++++
+<div class="solve-button-placeholder" data-module="module-01"></div>
+++++
+++++
+<div class="validate-button-placeholder" data-module="module-01"></div>
+++++
+====
+=====
+endif::[]

@@ -125,3 +125,18 @@ Also note that the `credential_type` value is simply the type's name.
 == Conclusion
 
 The Red Hat Ansible Automation Platform is developed following the "API first" model allowing all aspects of the system to be automatically configured and managed by using the API. This also allows us to "automate the automation" and use Ansible to fully configure it.
+
+ifeval::["{run_e2e_load_test}" == "true"]
+=====
+.End-to-End Validation (RHDP Only) ✅
+[%collapsible]
+====
+++++
+<div class="solve-button-placeholder" data-module="module-02"></div>
+++++
+++++
+<div class="validate-button-placeholder" data-module="module-02"></div>
+++++
+====
+=====
+endif::[]

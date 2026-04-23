@@ -143,3 +143,18 @@ Name your groups (and roles and playbooks, as part of collections) like Python v
 Constructed inventories are a great way to automatically organize hosts in groups, apply naming standards and much more. It's worth spending some time experimenting with this new capability.
 
 If you want to learn more about constructed inventories, there is a great https://www.redhat.com/en/blog/how-to-use-the-new-constructed-inventory-feature-in-aap-2.4[Blog Post,window=blank] and of course the https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/html/using_automation_execution/controller-inventories#ref-controller-constructed-inventories[Using automation execution documentation,window=blank].
+
+ifeval::["{run_e2e_load_test}" == "true"]
+=====
+.End-to-End Validation (RHDP Only) ✅
+[%collapsible]
+====
+++++
+<div class="solve-button-placeholder" data-module="module-06"></div>
+++++
+++++
+<div class="validate-button-placeholder" data-module="module-06"></div>
+++++
+====
+=====
+endif::[]

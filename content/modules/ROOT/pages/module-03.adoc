@@ -113,3 +113,18 @@ You should be greeted with a friendly `Hello World`. Well done!
 == Conclusion
 
 Workflows are a great way to build cross team and cross department automation, giving you the capability to built end to end automated processes.
+
+ifeval::["{run_e2e_load_test}" == "true"]
+=====
+.End-to-End Validation (RHDP Only) ✅
+[%collapsible]
+====
+++++
+<div class="solve-button-placeholder" data-module="module-03"></div>
+++++
+++++
+<div class="validate-button-placeholder" data-module="module-03"></div>
+++++
+====
+=====
+endif::[]

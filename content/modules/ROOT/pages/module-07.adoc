@@ -373,3 +373,18 @@ We changed a signed file and skipped signing it again to see the result in autom
 == Conclusion
 
 Software supply chain security is a very important topic, specially in the context of recent hacks were attackers managed to inject malware into well known and widely used software projects. With the described capabilities of the Red Hat Ansible Automation Platform, you can also create a complete chain of trust for your automation code. When you run mission critical automation, you also have to ensure you only execute trusted, certified and verified automation code.
+
+ifeval::["{run_e2e_load_test}" == "true"]
+=====
+.End-to-End Validation (RHDP Only) ✅
+[%collapsible]
+====
+++++
+<div class="solve-button-placeholder" data-module="module-07"></div>
+++++
+++++
+<div class="validate-button-placeholder" data-module="module-07"></div>
+++++
+====
+=====
+endif::[]

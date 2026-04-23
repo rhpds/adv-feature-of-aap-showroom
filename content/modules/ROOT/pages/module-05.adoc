@@ -184,3 +184,18 @@ Using this simple example you have:
 * Created a script to query an inventory source
 * Integrated the script into automation execution
 * Populated an inventory using the custom script
+
+ifeval::["{run_e2e_load_test}" == "true"]
+=====
+.End-to-End Validation (RHDP Only) ✅
+[%collapsible]
+====
+++++
+<div class="solve-button-placeholder" data-module="module-05"></div>
+++++
+++++
+<div class="validate-button-placeholder" data-module="module-05"></div>
+++++
+====
+=====
+endif::[]
