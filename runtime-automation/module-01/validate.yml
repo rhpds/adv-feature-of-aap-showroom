@@ -10,21 +10,28 @@
 # prose-03/04/05 are informational orientation content — no automatable outcome to check.
 #
 # Variable resolution order:
-#   controller_url      — extravar > derived from guid
-#   controller_username — extravar > bastion_user > 'lab-user'
-#   controller_password — extravar > bastion_password
+#   controller_url      — extravar > CONTROLLER_URL env > derived from guid
+#   controller_username — extravar > CONTROLLER_USERNAME env > bastion_user > 'lab-user'
+#   controller_password — extravar > CONTROLLER_PASSWORD env > bastion_password
 
 - name: Module 01 — Introduction to Unified UI Validation
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
+    # Required for connection: local inside runner container where ~lab-user does not exist
+    ansible_remote_tmp: /tmp/.ansible/tmp
     student_user: "{{ user | default('') }}"
-    # Derive controller URL from guid if not explicitly provided
+    # Derive controller URL — extravar > CONTROLLER_URL env > guid-based default
+    _env_controller_url: "{{ lookup('env', 'CONTROLLER_URL') }}"
     _default_controller_url: "https://controller-{{ guid | default('') }}.apps.ocpvdev01.rhdp.net"
-    aap_url: "{{ controller_url | default(_default_controller_url) }}"
-    aap_user: "{{ controller_username | default(bastion_user | default('lab-user')) }}"
-    aap_pass: "{{ controller_password | default(bastion_password | default('')) }}"
+    aap_url: "{{ controller_url | default(_env_controller_url if _env_controller_url else _default_controller_url) }}"
+    # Resolve username — extravar > CONTROLLER_USERNAME env > bastion_user > 'lab-user'
+    _env_controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+    aap_user: "{{ controller_username | default(_env_controller_username if _env_controller_username else bastion_user | default('lab-user')) }}"
+    # Resolve password — extravar > CONTROLLER_PASSWORD env > bastion_password
+    _env_controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+    aap_pass: "{{ controller_password | default(_env_controller_password if _env_controller_password else bastion_password | default('')) }}"
 
   tasks:
 
