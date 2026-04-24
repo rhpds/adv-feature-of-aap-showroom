@@ -13,11 +13,11 @@
 #     5.  Export GPG public key to ~/signing_demo.asc (idempotent)
 #     6.  Install ansible-sign via dnf (state: present — naturally idempotent)
 #     7.  Write MANIFEST.in to project root (idempotent)
-#     8.  Run ansible-sign project gpg-sign (re-sign is safe — overwrites .sig)
+#     8.  Generate sha256sum.txt via Python API + sign with gpg (no TTY needed)
 #     9.  Stage, commit, and push .ansible-sign/ + MANIFEST.in to Gitea
 #
 #   Play 3 — localhost: Create AAP credentials, project, wait for initial sync.
-#    10.  Slurp ~/signing_demo.asc from bastion
+#    10.  Read ~/signing_demo.asc from bastion via shell cat
 #    11.  Create AAP GPG credential "ansible-sign-cred" (idempotent)
 #    12.  Create AAP SCM credential "gitea-cred" (idempotent)
 #    13.  Create AAP project "Signed Project" with signature validation (idempotent)
@@ -43,7 +43,7 @@
   connection: local
   gather_facts: false
   vars:
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
     _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
@@ -174,7 +174,7 @@
       ignore_errors: true
 
     # -------------------------------------------------------------------------
-    # Step 7: Write MANIFEST.in to project root — idempotent
+    # Step 7: Write MANIFEST.in to project root
     # -------------------------------------------------------------------------
     - name: Check if MANIFEST.in already exists
       ansible.builtin.stat:
@@ -192,15 +192,51 @@
           recursive-exclude inventory *
           exclude .ansible-lint
           exclude .gitignore
+          exclude *.log
+          exclude *.json
           include *.yml
-      when: not r_manifest.stat.exists
 
     # -------------------------------------------------------------------------
-    # Step 8: Sign the project with ansible-sign (re-sign is safe)
+    # Step 8: Generate sha256sum.txt via ansible_sign Python API,
+    #         then sign it with gpg directly (no TTY required).
+    #         Using a temp script file avoids YAML indentation issues with
+    #         python3.11 -c multi-line inline code.
     # -------------------------------------------------------------------------
-    - name: Run ansible-sign project gpg-sign
+    - name: Write checksum generation script to /tmp
+      ansible.builtin.copy:
+        dest: /tmp/gen_checksums.py
+        mode: "0755"
+        content: |
+          import sys
+          sys.path.insert(0, '/usr/lib/python3.11/site-packages')
+          from ansible_sign.checksum import ChecksumFile
+          from pathlib import Path
+          import os
+
+          project_dir = sys.argv[1]
+          p = Path(project_dir)
+          cf = ChecksumFile(p)
+          text = cf.generate_gnu_style()
+          out = p / '.ansible-sign' / 'sha256sum.txt'
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(text)
+          print('sha256sum.txt written ({} bytes)'.format(len(text)))
+
+    - name: Generate sha256sum.txt using ansible_sign Python API
       ansible.builtin.shell: |
-        ansible-sign project gpg-sign {{ _project_dir }}
+        mkdir -p {{ _project_dir }}/.ansible-sign
+        python3.11 /tmp/gen_checksums.py {{ _project_dir }}
+      register: r_checksums
+      changed_when: "'written' in r_checksums.stdout"
+      ignore_errors: true
+
+    - name: Sign sha256sum.txt with gpg (no TTY)
+      ansible.builtin.shell: |
+        gpg --batch --yes --no-tty --armor --detach-sign \
+            --output {{ _project_dir }}/.ansible-sign/sha256sum.txt.sig \
+            --local-user "VerySecure" \
+            {{ _project_dir }}/.ansible-sign/sha256sum.txt
+        echo "GPG signing successful"
       register: r_sign
       changed_when: "'GPG signing successful' in r_sign.stdout"
       ignore_errors: true
@@ -238,6 +274,16 @@
       changed_when: false
       ignore_errors: true
 
+    # -------------------------------------------------------------------------
+    # Step 9b: Read signing_demo.asc on bastion and store as host var
+    # -------------------------------------------------------------------------
+    - name: Read signing_demo.asc content on bastion
+      ansible.builtin.shell: |
+        cat {{ _signing_asc }}
+      register: r_signing_asc_content
+      changed_when: false
+      ignore_errors: true
+
 # ---------------------------------------------------------------------------
 # Play 3 — Create AAP credentials, project, and wait for initial sync
 #           MUST complete before the tamper is pushed (Play 4)
@@ -255,24 +301,19 @@
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
     _aap_api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/+$', '') }}/api/controller/v2"
     _gitea_project: "playbooks-adv-controller"
-    _signing_asc: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}/signing_demo.asc"
 
   tasks:
 
     # -------------------------------------------------------------------------
-    # Step 10: Slurp signing_demo.asc from bastion for AAP credential body
+    # Step 10: Get GPG key content from bastion hostvars
     # -------------------------------------------------------------------------
-    - name: Read signing_demo.asc from bastion
-      ansible.builtin.slurp:
-        src: "{{ _signing_asc }}"
-      register: r_signing_asc
-      delegate_to: bastion
-      ignore_errors: true
-
-    - name: Set GPG public key fact
+    - name: Set GPG public key fact from bastion hostvars
       ansible.builtin.set_fact:
-        _gpg_pub_key: "{{ r_signing_asc.content | b64decode }}"
-      when: r_signing_asc.content is defined
+        _gpg_pub_key: "{{ hostvars['bastion']['r_signing_asc_content']['stdout'] }}"
+      when:
+        - hostvars['bastion']['r_signing_asc_content'] is defined
+        - hostvars['bastion']['r_signing_asc_content']['stdout'] is defined
+        - hostvars['bastion']['r_signing_asc_content']['stdout'] | length > 0
 
     # -------------------------------------------------------------------------
     # Step 11: Create AAP GPG credential "ansible-sign-cred" (idempotent)
@@ -653,35 +694,35 @@
       when: _project_id is defined
 
     # -------------------------------------------------------------------------
-    # Verification checks — bastion-side
+    # Verification checks — bastion-side via hostvars
     # -------------------------------------------------------------------------
-    - name: Verify VerySecure GPG key exists in bastion keyring
-      ansible.builtin.shell: |
-        gpg --list-keys 2>/dev/null | grep -q 'VerySecure' && echo exists || echo missing
-      register: r_gpg_verify
-      changed_when: false
-      ignore_errors: true
-      delegate_to: bastion
-
-    - name: Set GPG key exists fact
+    - name: Set GPG key exists fact from bastion hostvars
       ansible.builtin.set_fact:
-        _gpg_key_ok: "{{ (r_gpg_verify.stdout | trim) == 'exists' }}"
+        _gpg_key_ok: >-
+          {{
+            hostvars['bastion']['r_gpg_key_check'] is defined
+            and (hostvars['bastion']['r_gpg_key_check']['stdout'] | default('') | trim) == 'exists'
+          }}
 
-    - name: Verify signing_demo.asc exists and contains PGP block
-      ansible.builtin.shell: |
-        test -f {{ _signing_asc }} \
-          && grep -q 'BEGIN PGP PUBLIC KEY BLOCK' {{ _signing_asc }} \
-          && echo ok || echo missing
-      register: r_asc_verify
-      changed_when: false
-      ignore_errors: true
-      delegate_to: bastion
-
-    - name: Set signing_demo.asc valid fact
+    - name: Set signing_demo.asc valid fact from bastion hostvars
       ansible.builtin.set_fact:
-        _asc_ok: "{{ (r_asc_verify.stdout | trim) == 'ok' }}"
+        _asc_ok: >-
+          {{
+            hostvars['bastion']['r_signing_asc_content'] is defined
+            and (hostvars['bastion']['r_signing_asc_content']['stdout'] | default('')) | length > 0
+            and 'BEGIN PGP PUBLIC KEY BLOCK' in (hostvars['bastion']['r_signing_asc_content']['stdout'] | default(''))
+          }}
 
-    - name: Verify ansible-sign is installed on bastion
+    - name: Set ansible-sign installed fact from bastion hostvars
+      ansible.builtin.set_fact:
+        _ansiblesign_ok: >-
+          {{
+            hostvars['bastion']['r_sign'] is defined
+            or (hostvars['bastion']['r_manifest'] is defined
+                and hostvars['bastion']['r_manifest']['stat']['exists'] | default(false))
+          }}
+
+    - name: Verify ansible-sign installed on bastion
       ansible.builtin.shell: |
         rpm -q ansible-sign > /dev/null 2>&1 && echo installed || echo missing
       register: r_ansiblesign_verify
@@ -689,39 +730,40 @@
       ignore_errors: true
       delegate_to: bastion
 
-    - name: Set ansible-sign installed fact
+    - name: Set ansible-sign installed fact from verify
       ansible.builtin.set_fact:
-        _ansiblesign_ok: "{{ (r_ansiblesign_verify.stdout | trim) == 'installed' }}"
+        _ansiblesign_ok: "{{ (r_ansiblesign_verify.stdout | default('') | trim) == 'installed' }}"
 
-    - name: Verify MANIFEST.in exists in project root on bastion
-      ansible.builtin.stat:
-        path: "{{ _project_dir_path }}/MANIFEST.in"
-      register: r_manifest_verify
+    - name: Set MANIFEST.in exists fact from bastion hostvars
+      ansible.builtin.set_fact:
+        _manifest_ok: >-
+          {{
+            hostvars['bastion']['r_manifest'] is defined
+            and hostvars['bastion']['r_manifest']['stat']['exists'] | default(false)
+          }}
+
+    - name: Set sha256sum.txt exists fact from bastion hostvars
+      ansible.builtin.set_fact:
+        _sha256_ok: >-
+          {{
+            hostvars['bastion']['r_sha256_verify'] is defined
+            and hostvars['bastion']['r_sha256_verify']['stat']['exists'] | default(false)
+          }}
+
+    - name: Verify .ansible-sign files exist on bastion
+      ansible.builtin.shell: |
+        test -f {{ _project_dir_path }}/.ansible-sign/sha256sum.txt \
+          && test -f {{ _project_dir_path }}/.ansible-sign/sha256sum.txt.sig \
+          && echo both_exist || echo missing
+      register: r_sign_files_verify
+      changed_when: false
+      ignore_errors: true
       delegate_to: bastion
 
-    - name: Set MANIFEST.in exists fact
+    - name: Set sha256sum files exist facts from verify
       ansible.builtin.set_fact:
-        _manifest_ok: "{{ r_manifest_verify.stat.exists }}"
-
-    - name: Verify .ansible-sign/sha256sum.txt exists on bastion
-      ansible.builtin.stat:
-        path: "{{ _project_dir_path }}/.ansible-sign/sha256sum.txt"
-      register: r_sha256_verify
-      delegate_to: bastion
-
-    - name: Set sha256sum.txt exists fact
-      ansible.builtin.set_fact:
-        _sha256_ok: "{{ r_sha256_verify.stat.exists }}"
-
-    - name: Verify .ansible-sign/sha256sum.txt.sig exists on bastion
-      ansible.builtin.stat:
-        path: "{{ _project_dir_path }}/.ansible-sign/sha256sum.txt.sig"
-      register: r_sig_verify
-      delegate_to: bastion
-
-    - name: Set sha256sum.txt.sig exists fact
-      ansible.builtin.set_fact:
-        _sig_ok: "{{ r_sig_verify.stat.exists }}"
+        _sha256_ok: "{{ (r_sign_files_verify.stdout | default('') | trim) == 'both_exist' }}"
+        _sig_ok: "{{ (r_sign_files_verify.stdout | default('') | trim) == 'both_exist' }}"
 
     - name: Verify signed commit is present in git log
       ansible.builtin.shell: |
@@ -735,7 +777,7 @@
 
     - name: Set signed commit pushed fact
       ansible.builtin.set_fact:
-        _git_signed_pushed_ok: "{{ (r_git_pushed_verify.stdout | trim) == 'pushed' }}"
+        _git_signed_pushed_ok: "{{ (r_git_pushed_verify.stdout | default('') | trim) == 'pushed' }}"
 
     - name: Verify tamper commit is present in git log
       ansible.builtin.shell: |
@@ -749,7 +791,7 @@
 
     - name: Set tamper commit pushed fact
       ansible.builtin.set_fact:
-        _tamper_pushed_ok: "{{ (r_tamper_pushed_verify.stdout | trim) == 'pushed' }}"
+        _tamper_pushed_ok: "{{ (r_tamper_pushed_verify.stdout | default('') | trim) == 'pushed' }}"
 
     # -------------------------------------------------------------------------
     # AAP credential and project existence checks
