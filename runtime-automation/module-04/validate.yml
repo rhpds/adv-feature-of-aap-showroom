@@ -29,7 +29,7 @@
   connection: local
   gather_facts: false
   vars:
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
     _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
@@ -459,7 +459,7 @@
     # Validate all tasks
     # -------------------------------------------------------
     - name: Validate all tasks
-      rhpds.ftl.validation_check:
+      validation_check:
         check: >-
           {{
             _task1_ok and _task2_ok and _task3_ok

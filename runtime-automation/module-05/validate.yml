@@ -23,7 +23,7 @@
   gather_facts: false
   vars:
     student_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
-    bastion_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    bastion_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     bastion_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default(22) }}"
     bastion_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
     bastion_password: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
@@ -338,7 +338,7 @@
           }}
 
     - name: Validate all tasks — module 05 Dynamic Inventories
-      rhpds.ftl.validation_check:
+      validation_check:
         check: "{{ _all_ok }}"
         pass_msg: |
           Task 1: dyninv.sh exists at /home/{{ bastion_user }}/dyninv.sh and is executable (mode 0755)

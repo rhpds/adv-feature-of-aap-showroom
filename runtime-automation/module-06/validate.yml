@@ -18,7 +18,7 @@
 #
 # Credentials: env vars via lookup('ansible.builtin.env', ...)
 # API base:    /api/controller/v2/  (AAP 2.5 unified gateway — NOT /api/v2/)
-# Module:      rhpds.ftl.validation_check  (FQCN required)
+# Module:      validation_check  (FQCN required)
 
 - name: Module 06 Validation — Constructed Inventory
   hosts: localhost
@@ -443,7 +443,7 @@
     # Final validation_check
     # -------------------------------------------------------
     - name: Validate module 06 — Constructed Inventory
-      rhpds.ftl.validation_check:
+      validation_check:
         check: "{{ _all_ok }}"
         pass_msg: |
           Task 1:  "Constructed Inventory" exists in AAP (kind=constructed, org=Default)

@@ -25,7 +25,7 @@
   hosts: localhost
   gather_facts: false
   vars:
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
     _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
@@ -127,7 +127,7 @@
         bastion_opa_http_code: "{{ r_opa_health.stdout | default('000') | trim }}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Play 2 — Localhost AAP REST checks and final rhpds.ftl.validation_check
+# Play 2 — Localhost AAP REST checks and final validation_check
 # ─────────────────────────────────────────────────────────────────────────────
 - name: Module 09 Validate — AAP checks and final result
   hosts: localhost
@@ -264,10 +264,10 @@
         _task9_ok: "{{ (_job_success_count | int) >= 1 }}"
 
     # -------------------------------------------------------
-    # Final rhpds.ftl.validation_check
+    # Final validation_check
     # -------------------------------------------------------
     - name: Validate all tasks
-      rhpds.ftl.validation_check:
+      validation_check:
         check: >-
           {{
             _task1_ok | bool

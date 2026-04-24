@@ -26,7 +26,7 @@
   connection: local
   gather_facts: false
   vars:
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOST') }}"
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22') }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
     _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
@@ -56,7 +56,7 @@
     _ctrl_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
-    _node1: "{{ lookup('ansible.builtin.env', 'SSH_HOST') | regex_replace('^bastion\\.', 'node1.') }}"
+    _node1: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') | regex_replace('^bastion\\.', 'node1.') }}"
     _api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}/api/controller/v2"
 
   tasks:
