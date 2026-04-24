@@ -12,36 +12,36 @@
 # -------------------------------------------------------------------------
 # Play 1 — Build dynamic bastion inventory from environment variables
 # -------------------------------------------------------------------------
-- name: Build bastion inventory
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
-    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22') }}"
-    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
-    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
+# - name: Build bastion inventory
+#   hosts: localhost
+#   connection: local
+#   gather_facts: false
+#   vars:
+#     ansible_connection: local
+#     ansible_host: 127.0.0.1
+#     _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
+#     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22') }}"
+#     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
+#     _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
 
-  tasks:
+#   tasks:
 
-    - name: Add bastion to in-memory inventory
-      ansible.builtin.add_host:
-        name: bastion
-        groups: bastion
-        ansible_host: "{{ _ssh_host }}"
-        ansible_port: "{{ _ssh_port | int }}"
-        ansible_user: "{{ _ssh_user }}"
-        ansible_password: "{{ _ssh_pass }}"
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: _ssh_host | length > 0
+    # - name: Add bastion to in-memory inventory
+    #   ansible.builtin.add_host:
+    #     name: bastion
+    #     groups: bastion
+    #     ansible_host: "{{ _ssh_host }}"
+    #     ansible_port: "{{ _ssh_port | int }}"
+    #     ansible_user: "{{ _ssh_user }}"
+    #     ansible_password: "{{ _ssh_pass }}"
+    #     ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    #   when: _ssh_host | length > 0
 
 # -------------------------------------------------------------------------
 # Play 2 — Run solve steps on bastion via SSH
 # -------------------------------------------------------------------------
 - name: Module 02 Solve — Configure resources with Ansible (bastion)
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
@@ -157,12 +157,9 @@
 # Play 3 — Verify AAP resources via REST API (localhost)
 # -------------------------------------------------------------------------
 - name: Module 02 Solve — Verify AAP resources via REST API
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     _ctrl_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
