@@ -6,6 +6,12 @@ nav:
   - modules/ROOT/nav.adoc
 asciidoc:
   attributes:
+    lab_name: LB1347 - Advanced Features of Ansible Automation Platform
+    release-version: master
+    page-pagination: true
+    page-links:
+    - url: https://redhat.com
+      text: Red Hat
     # attributes only defined in Showroom
     node1_hostname: node1
     node2_hostname: node2
