@@ -25,6 +25,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     _api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}/api/controller/v2"
     _aap_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _aap_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"

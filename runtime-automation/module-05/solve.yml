@@ -26,6 +26,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user', true) }}"
@@ -104,6 +106,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     # ── env lookups ────────────────────────────────────────────────────────────
     _controller_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/+$', '') }}"
     _controller_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"

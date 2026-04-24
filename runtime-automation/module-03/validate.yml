@@ -24,6 +24,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22') }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"

@@ -19,6 +19,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     # Required for connection: local inside runner container where ~lab-user does not exist
     ansible_remote_tmp: /tmp/.ansible/tmp
     student_user: "{{ user | default('') }}"

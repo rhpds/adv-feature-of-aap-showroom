@@ -22,6 +22,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     student_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
     bastion_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     bastion_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default(22) }}"
@@ -153,6 +155,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     student_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
     controller_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     controller_username: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"

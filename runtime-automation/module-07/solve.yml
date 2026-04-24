@@ -43,6 +43,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
     _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
@@ -293,6 +295,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
     _gitea_url: "{{ lookup('ansible.builtin.env', 'GITEA_URL') | regex_replace('/+$', '') }}"
@@ -635,6 +639,8 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_connection: local
+    ansible_host: 127.0.0.1
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
