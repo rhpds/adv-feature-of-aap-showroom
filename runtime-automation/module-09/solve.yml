@@ -9,9 +9,9 @@
 #   prose-07: Get current UTC hour on bastion; patch maintenance_window.rego to bracket current hour
 #   prose-08: PATCH Demo JT policy_enforcement="aap/maintenance"; add label "maintenance"; launch; assert SUCCEEDS
 #   prose-09: Remove label "maintenance"; launch; poll; assert error (no label)
-#   prose-10: Patch maintenance_window.rego to window OUTSIDE current hour;
+#   prose-10: PUT outside-window rego to OPA (pre-built in Play 2);
 #             re-add label "maintenance"; launch; poll; assert error (outside window)
-#   final:    Re-associate maintenance label so validate task-7 passes
+#   final:    PUT inclusive rego back to OPA; ensure maintenance label is associated
 #
 # SKIP (visual / exploratory only):
 #   prose-01: AAP login
@@ -20,7 +20,7 @@
 #   prose-11: prose-06 equivalent
 #
 # Play 1: build dynamic bastion inventory (localhost)
-# Play 2: bastion — git clone, copy policies, get UTC hour, patch maintenance_window.rego
+# Play 2: bastion — git clone, copy policies, patch rego files (inclusive + exclusive versions)
 # Play 3: localhost — all AAP REST API calls (PATCH JT, launch, poll, assert)
 #
 # All variables are resolved via lookup('ansible.builtin.env', ...) — no bare extravars.
@@ -29,8 +29,18 @@
 # OPA blocks happen at runtime: AAP accepts the launch (HTTP 201) but OPA causes job status=error.
 # Therefore block detection polls the job status, not the launch HTTP response.
 #
-# IMPORTANT: All rego file writes use atomic Python temp-file+rename to generate exactly ONE
-# inotify event, preventing OPA from reloading intermediate/inconsistent policy states.
+# ARCHITECTURE: All bastion file operations happen in Play 2 (direct connection, no delegate_to).
+# Play 3 only uses localhost REST API calls. OPA updates in Play 3 are done by:
+#   - ssh cat <file on bastion> | curl PUT http://10.88.0.1:8181/v1/policies/...
+#   All running entirely on localhost (runner container).
+# This avoids Ansible delegate_to shell/heredoc issues.
+#
+# Two rego versions are pre-built in Play 2:
+#   /var/lib/opa/policies/maintenance_window.rego  — inclusive (current hour inside window)
+#   /tmp/maint_excl.rego                           — exclusive (current hour OUTSIDE window)
+# Play 3 PUTs the appropriate version to OPA as needed.
+#
+# OPA is accessible from runner container at http://10.88.0.1:8181 (Podman network gateway).
 
 # =============================================================================
 # Play 1 — Build dynamic bastion inventory from environment variables
@@ -57,7 +67,7 @@
       when: _ssh_host | length > 0
 
 # =============================================================================
-# Play 2 — Bastion: clone OPA policies, copy to policy dir, patch rego file
+# Play 2 — Bastion: clone OPA policies, copy to policy dir, build rego variants
 # =============================================================================
 - name: Module 09 — Bastion file operations
   hosts: bastion
@@ -90,6 +100,22 @@
         cp "{{ _repo_dir }}"/*.rego "{{ _opa_policy_dir }}/" 2>&1 && echo copied
       register: r_copy
       changed_when: "'copied' in r_copy.stdout"
+      ignore_errors: true
+
+    # After cp: OPA file watcher may trigger (with permission denied for .tmp files).
+    # Use curl PUT to sync each policy to OPA immediately.
+    - name: Reload all three policies into OPA via PUT API (post-copy sync)
+      ansible.builtin.shell: |
+        for REGO in deny.rego extra_vars.rego maintenance_window.rego; do
+          REGO_PATH="{{ _opa_policy_dir }}/${REGO}"
+          RESULT=$(curl -s -X PUT \
+            "http://localhost:8181/v1/policies/policies/${REGO}" \
+            -H 'Content-Type: text/plain' \
+            --data-binary "@${REGO_PATH}" 2>/dev/null)
+          echo "${REGO}: ${RESULT}"
+        done
+      register: r_opa_reload_all
+      changed_when: false
       ignore_errors: true
 
     # -------------------------------------------------------------------------
@@ -132,18 +158,17 @@
         window_end_hour: "{{ (r_utc_hour.stdout | trim | int + 2) % 24 }}"
 
     # -------------------------------------------------------------------------
-    # prose-07 (part B): Patch maintenance_window.rego to include current time
-    # Uses atomic Python temp-file+rename to generate exactly ONE inotify event
-    # and avoid OPA reloading intermediate inconsistent policy states.
+    # prose-07 (part B): Write INCLUSIVE maintenance_window.rego
+    # Python atomic rename runs directly on bastion (not via delegate_to).
+    # This is the primary rego file used for prose-08, prose-09, and final state.
     # -------------------------------------------------------------------------
-    - name: Patch maintenance_window.rego with current-time-inclusive window (atomic)
+    - name: "prose-07: Write inclusive maintenance_window.rego via Python (atomic)"
       ansible.builtin.shell: |
-        REGO="{{ _opa_policy_dir }}/maintenance_window.rego"
-        python3 - "$REGO" "{{ window_start_hour }}" "{{ window_end_hour }}" <<'PYEOF'
-        import sys, re, os, tempfile
-        rego_path = sys.argv[1]
-        start_hour = sys.argv[2]
-        end_hour   = sys.argv[3]
+        python3 << 'PYEOF'
+        import re, os, tempfile, sys
+        rego_path  = '{{ _opa_policy_dir }}/maintenance_window.rego'
+        start_hour = '{{ window_start_hour }}'
+        end_hour   = '{{ window_end_hour }}'
         with open(rego_path, 'r') as f:
             content = f.read()
         content = re.sub(r'^\s*window_start_hour\s*:=\s*\d+',
@@ -158,11 +183,29 @@
         fd, tmp = tempfile.mkstemp(dir=dir_, suffix='.tmp')
         os.write(fd, content.encode())
         os.close(fd)
+        os.chmod(tmp, 0o644)
         os.rename(tmp, rego_path)
+        print('wrote: window_start_hour=' + start_hour + ' window_end_hour=' + end_hour)
         PYEOF
-        echo "patched window {{ window_start_hour }}:00 to {{ window_end_hour }}:00"
-      register: r_patch_rego_incl
+      register: r_write_incl_play2
       changed_when: true
+      ignore_errors: true
+
+    - name: "prose-07: PUT inclusive maintenance_window.rego to OPA API (immediate reload)"
+      ansible.builtin.shell: |
+        REGO="{{ _opa_policy_dir }}/maintenance_window.rego"
+        RESULT=$(curl -s -X PUT \
+          http://localhost:8181/v1/policies/policies/maintenance_window.rego \
+          -H 'Content-Type: text/plain' \
+          --data-binary "@${REGO}" 2>/dev/null)
+        echo "opa_put_result: ${RESULT}"
+        OPA_VAL=$(curl -s -X POST \
+          http://localhost:8181/v1/data/aap/maintenance/window_start_hour \
+          -H 'Content-Type: application/json' \
+          -d '{}' 2>/dev/null | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result","none"))' 2>/dev/null)
+        echo "opa_verify_window_start_hour: ${OPA_VAL}"
+      register: r_put_incl_play2
+      changed_when: false
       ignore_errors: true
 
     - name: Verify maintenance_window.rego has correct inclusive start hour
@@ -175,6 +218,59 @@
     - name: Set maintenance window inclusive patched fact
       ansible.builtin.set_fact:
         maint_window_incl_patched: "{{ (r_rego_incl_check.stdout | default('wrong') | trim) == 'ok' }}"
+
+    # -------------------------------------------------------------------------
+    # prose-07 (part C): Pre-build EXCLUSIVE maintenance_window.rego for prose-10
+    # Write to /tmp/maint_excl.rego on bastion.
+    # Play 3 will PUT this file's content to OPA when needed (via SSH cat | curl).
+    # This runs directly on bastion (no delegate_to), so Python heredoc works fine.
+    # -------------------------------------------------------------------------
+    - name: "prose-07: Write EXCLUSIVE maintenance_window.rego to /tmp/maint_excl.rego"
+      ansible.builtin.shell: |
+        python3 << 'PYEOF'
+        import re, os, tempfile, subprocess
+        rego_path  = '{{ _opa_policy_dir }}/maintenance_window.rego'
+        excl_path  = '/tmp/maint_excl.rego'
+        cur_hour   = int('{{ window_start_hour }}')
+        excl_start = (cur_hour + 12) % 24
+        excl_end   = (cur_hour + 14) % 24
+        with open(rego_path, 'r') as f:
+            content = f.read()
+        content = re.sub(r'^\s*window_start_hour\s*:=\s*\d+',
+                         'window_start_hour := ' + str(excl_start), content, flags=re.MULTILINE)
+        content = re.sub(r'^\s*window_start_minute\s*:=\s*\d+',
+                         'window_start_minute := 0', content, flags=re.MULTILINE)
+        content = re.sub(r'^\s*window_end_hour\s*:=\s*\d+',
+                         'window_end_hour := ' + str(excl_end), content, flags=re.MULTILINE)
+        content = re.sub(r'^\s*window_end_minute\s*:=\s*\d+',
+                         'window_end_minute := 0', content, flags=re.MULTILINE)
+        with open(excl_path, 'w') as f:
+            f.write(content)
+        os.chmod(excl_path, 0o644)
+        print('wrote excl: window_start_hour=' + str(excl_start) + ' window_end_hour=' + str(excl_end)
+              + ' (cur_hour=' + str(cur_hour) + ' excluded)')
+        PYEOF
+      register: r_write_excl_play2
+      changed_when: true
+      ignore_errors: true
+
+    - name: Verify /tmp/maint_excl.rego was written correctly
+      ansible.builtin.shell: |
+        if [ -f /tmp/maint_excl.rego ]; then
+          EXCL_START=$(grep '^window_start_hour' /tmp/maint_excl.rego | grep -oE '[0-9]+' | head -1)
+          INCL_START=$(grep '^window_start_hour' {{ _opa_policy_dir }}/maintenance_window.rego | grep -oE '[0-9]+' | head -1)
+          echo "incl_start=${INCL_START} excl_start=${EXCL_START}"
+          [ "${EXCL_START}" != "${INCL_START}" ] && echo "ok" || echo "wrong-same-as-incl"
+        else
+          echo "MISSING"
+        fi
+      register: r_excl_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set exclusive rego written fact
+      ansible.builtin.set_fact:
+        excl_rego_ready: "{{ 'ok' in (r_excl_check.stdout | default('') | trim) }}"
 
     # -------------------------------------------------------------------------
     # OPA server reachability check from bastion localhost
@@ -203,6 +299,7 @@
         bastion_opa_reachable: "{{ opa_reachable }}"
         bastion_maint_window_incl_patched: "{{ maint_window_incl_patched }}"
         bastion_current_hour: "{{ current_hour }}"
+        bastion_excl_rego_ready: "{{ excl_rego_ready }}"
 
 # =============================================================================
 # Play 3 — Localhost: all AAP REST API calls
@@ -216,6 +313,13 @@
     _controller_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _controller_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
     _aap_api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/$', '') }}/api/controller/v2"
+    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
+    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
+    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user', true) }}"
+    _opa_policy_dir: /var/lib/opa/policies
+    _opa_api: "http://10.88.0.1:8181"
+    _opa_incl_rego: "/var/lib/opa/policies/maintenance_window.rego"
+    _opa_excl_rego: "/tmp/maint_excl.rego"
 
   tasks:
 
@@ -470,6 +574,8 @@
 
     # -------------------------------------------------------------------------
     # prose-08 (setup): PATCH Demo JT opa_query_path=aap/maintenance; find/create label; associate
+    # prose-08 OPA update: PUT inclusive rego (pre-built in Play 2) to OPA from localhost.
+    # The inclusive rego was already written to /var/lib/opa/policies/maintenance_window.rego by Play 2.
     # -------------------------------------------------------------------------
     - name: "prose-08: PATCH Demo JT — opa_query_path=aap/maintenance, clear extra_vars"
       ansible.builtin.uri:
@@ -553,61 +659,31 @@
       ansible.builtin.debug:
         msg: "maintenance_label_id = {{ maintenance_label_id | default('NOT SET') }}"
 
-    # prose-08 (part B): Re-patch maintenance_window.rego to INCLUSIVE window for this launch
-    # Uses atomic Python temp-file+rename to generate exactly ONE inotify event.
-    - name: "prose-08: Re-patch maintenance_window.rego to INCLUSIVE window for this launch (atomic)"
+    # prose-08: PUT INCLUSIVE rego to OPA from localhost.
+    # SSH cat reads the inclusive rego from bastion (written in Play 2), pipes to OPA PUT.
+    # This runs entirely on localhost — no delegate_to.
+    - name: "prose-08: PUT INCLUSIVE maintenance_window.rego to OPA API via localhost curl"
       ansible.builtin.shell: |
-        REGO=/var/lib/opa/policies/maintenance_window.rego
-        CUR_HOUR=$(date -u +%H | sed 's/^0//')
-        WIN_END=$(( (CUR_HOUR + 2) % 24 ))
-        python3 - "$REGO" "$CUR_HOUR" "$WIN_END" <<'PYEOF'
-        import sys, re, os, tempfile
-        rego_path  = sys.argv[1]
-        start_hour = sys.argv[2]
-        end_hour   = sys.argv[3]
-        with open(rego_path, 'r') as f:
-            content = f.read()
-        content = re.sub(r'^\s*window_start_hour\s*:=\s*\d+',
-                         'window_start_hour := ' + start_hour, content, flags=re.MULTILINE)
-        content = re.sub(r'^\s*window_start_minute\s*:=\s*\d+',
-                         'window_start_minute := 0', content, flags=re.MULTILINE)
-        content = re.sub(r'^\s*window_end_hour\s*:=\s*\d+',
-                         'window_end_hour := ' + end_hour, content, flags=re.MULTILINE)
-        content = re.sub(r'^\s*window_end_minute\s*:=\s*\d+',
-                         'window_end_minute := 0', content, flags=re.MULTILINE)
-        dir_ = os.path.dirname(rego_path)
-        fd, tmp = tempfile.mkstemp(dir=dir_, suffix='.tmp')
-        os.write(fd, content.encode())
-        os.close(fd)
-        os.rename(tmp, rego_path)
-        PYEOF
-        echo "re-patched inclusive: ${CUR_HOUR}:00-${WIN_END}:00"
-      delegate_to: bastion
-      register: r_repatch_incl
-      changed_when: true
-      ignore_errors: true
-
-    # Wait for OPA to reload the inclusive window policy.
-    # Poll the OPA data API until window_start_hour matches the expected current hour.
-    # Uses single-quoted python3 args to avoid shell quoting issues.
-    - name: "prose-08: Wait for OPA to reload inclusive window (poll OPA API on bastion)"
-      ansible.builtin.shell: |
-        EXPECTED=$(date -u +%H | sed 's/^0//')
-        for i in $(seq 1 30); do
-          OPA_VAL=$(curl -s -X POST \
-            http://localhost:8181/v1/data/aap/maintenance/window_start_hour \
-            -H 'Content-Type: application/json' \
-            -d '{}' 2>/dev/null \
-            | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result",""))' 2>/dev/null)
-          if [ "$OPA_VAL" = "$EXPECTED" ]; then
-            echo "opa_reloaded_to_${EXPECTED}"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "timeout_opa_val_${OPA_VAL}_expected_${EXPECTED}"
-      delegate_to: bastion
-      register: r_wait_opa_incl
+        REGO_CONTENT=$(ssh -p {{ _ssh_port }} -i /app/.ssh/id_rsa \
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          {{ _ssh_user }}@{{ _ssh_host }} \
+          'cat {{ _opa_incl_rego }}' 2>/dev/null)
+        if [ -z "${REGO_CONTENT}" ]; then
+          echo "ERROR: could not read inclusive rego from bastion"
+          exit 1
+        fi
+        RESULT=$(echo "${REGO_CONTENT}" | curl -s -X PUT \
+          {{ _opa_api }}/v1/policies/policies/maintenance_window.rego \
+          -H 'Content-Type: text/plain' \
+          --data-binary @- 2>/dev/null)
+        echo "opa_put: ${RESULT}"
+        OPA_VAL=$(curl -s -X POST \
+          {{ _opa_api }}/v1/data/aap/maintenance/window_start_hour \
+          -H 'Content-Type: application/json' \
+          -d '{}' 2>/dev/null \
+          | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result","none"))' 2>/dev/null)
+        echo "opa_verify_window_start_hour: ${OPA_VAL}"
+      register: r_put_incl
       changed_when: false
       ignore_errors: true
 
@@ -756,66 +832,32 @@
       when: jt_id | default('') | length > 0
 
     # -------------------------------------------------------------------------
-    # prose-10: Patch rego to OUTSIDE window; re-add label; launch; poll; assert error (outside window)
-    # Uses atomic Python temp-file+rename to generate exactly ONE inotify event.
-    # This prevents OPA from reloading intermediate inconsistent states that
-    # 4 sequential sed -i commands would cause (4 separate inotify events).
+    # prose-10: PUT EXCLUSIVE rego to OPA; re-add label; launch; poll; assert error (outside window)
+    # The exclusive rego (/tmp/maint_excl.rego) was pre-built in Play 2 on bastion.
+    # This PUT happens entirely from localhost via SSH cat | curl — no delegate_to.
     # -------------------------------------------------------------------------
-    - name: "prose-10: Patch maintenance_window.rego to window OUTSIDE current time (atomic)"
+    - name: "prose-10: PUT OUTSIDE-window maintenance_window.rego to OPA API via localhost curl"
       ansible.builtin.shell: |
-        REGO=/var/lib/opa/policies/maintenance_window.rego
-        CUR_HOUR=$(date -u +%H | sed 's/^0//')
-        EXCL_START=$(( (CUR_HOUR + 12) % 24 ))
-        EXCL_END=$(( (CUR_HOUR + 14) % 24 ))
-        python3 - "$REGO" "$EXCL_START" "$EXCL_END" <<'PYEOF'
-        import sys, re, os, tempfile
-        rego_path  = sys.argv[1]
-        start_hour = sys.argv[2]
-        end_hour   = sys.argv[3]
-        with open(rego_path, 'r') as f:
-            content = f.read()
-        content = re.sub(r'^\s*window_start_hour\s*:=\s*\d+',
-                         'window_start_hour := ' + start_hour, content, flags=re.MULTILINE)
-        content = re.sub(r'^\s*window_start_minute\s*:=\s*\d+',
-                         'window_start_minute := 0', content, flags=re.MULTILINE)
-        content = re.sub(r'^\s*window_end_hour\s*:=\s*\d+',
-                         'window_end_hour := ' + end_hour, content, flags=re.MULTILINE)
-        content = re.sub(r'^\s*window_end_minute\s*:=\s*\d+',
-                         'window_end_minute := 0', content, flags=re.MULTILINE)
-        dir_ = os.path.dirname(rego_path)
-        fd, tmp = tempfile.mkstemp(dir=dir_, suffix='.tmp')
-        os.write(fd, content.encode())
-        os.close(fd)
-        os.rename(tmp, rego_path)
-        PYEOF
-        echo "window moved to ${EXCL_START}:00-${EXCL_END}:00 (current ${CUR_HOUR}:xx excluded)"
-      delegate_to: bastion
-      register: r_patch_rego_excl_final
-      changed_when: true
-      ignore_errors: true
-
-    # Wait for OPA to reload the outside-window policy.
-    # Poll the OPA data API until window_start_hour matches EXCL_START.
-    # Uses single-quoted python3 args to avoid shell quoting issues.
-    - name: "prose-10: Wait for OPA to reload outside-window patch (poll OPA API on bastion)"
-      ansible.builtin.shell: |
-        CUR_HOUR=$(date -u +%H | sed 's/^0//')
-        EXPECTED_START=$(( (CUR_HOUR + 12) % 24 ))
-        for i in $(seq 1 30); do
-          OPA_VAL=$(curl -s -X POST \
-            http://localhost:8181/v1/data/aap/maintenance/window_start_hour \
-            -H 'Content-Type: application/json' \
-            -d '{}' 2>/dev/null \
-            | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result",""))' 2>/dev/null)
-          if [ "$OPA_VAL" = "$EXPECTED_START" ]; then
-            echo "opa_reloaded_to_${EXPECTED_START}"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "timeout_opa_val_${OPA_VAL}_expected_${EXPECTED_START}"
-      delegate_to: bastion
-      register: r_wait_opa_excl
+        REGO_CONTENT=$(ssh -p {{ _ssh_port }} -i /app/.ssh/id_rsa \
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          {{ _ssh_user }}@{{ _ssh_host }} \
+          'cat {{ _opa_excl_rego }}' 2>/dev/null)
+        if [ -z "${REGO_CONTENT}" ]; then
+          echo "ERROR: could not read exclusive rego from bastion ({{ _opa_excl_rego }})"
+          exit 1
+        fi
+        RESULT=$(echo "${REGO_CONTENT}" | curl -s -X PUT \
+          {{ _opa_api }}/v1/policies/policies/maintenance_window.rego \
+          -H 'Content-Type: text/plain' \
+          --data-binary @- 2>/dev/null)
+        echo "opa_put: ${RESULT}"
+        OPA_VAL=$(curl -s -X POST \
+          {{ _opa_api }}/v1/data/aap/maintenance/window_start_hour \
+          -H 'Content-Type: application/json' \
+          -d '{}' 2>/dev/null \
+          | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result","none"))' 2>/dev/null)
+        echo "opa_verify_window_start_hour: ${OPA_VAL}"
+      register: r_put_excl
       changed_when: false
       ignore_errors: true
 
@@ -891,9 +933,37 @@
       when: jt_id | default('') | length > 0
 
     # -------------------------------------------------------------------------
+    # Final state: PUT INCLUSIVE rego back to OPA; ensure maintenance label is associated
+    # The inclusive rego is at /var/lib/opa/policies/maintenance_window.rego on bastion.
+    # SSH cat reads it, curl PUTs to OPA — all from localhost, no delegate_to.
+    # -------------------------------------------------------------------------
+    - name: "Final: PUT INCLUSIVE maintenance_window.rego to OPA API via localhost curl"
+      ansible.builtin.shell: |
+        REGO_CONTENT=$(ssh -p {{ _ssh_port }} -i /app/.ssh/id_rsa \
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          {{ _ssh_user }}@{{ _ssh_host }} \
+          'cat {{ _opa_incl_rego }}' 2>/dev/null)
+        if [ -z "${REGO_CONTENT}" ]; then
+          echo "ERROR: could not read inclusive rego from bastion"
+          exit 1
+        fi
+        RESULT=$(echo "${REGO_CONTENT}" | curl -s -X PUT \
+          {{ _opa_api }}/v1/policies/policies/maintenance_window.rego \
+          -H 'Content-Type: text/plain' \
+          --data-binary @- 2>/dev/null)
+        echo "opa_put: ${RESULT}"
+        OPA_VAL=$(curl -s -X POST \
+          {{ _opa_api }}/v1/data/aap/maintenance/window_start_hour \
+          -H 'Content-Type: application/json' \
+          -d '{}' 2>/dev/null \
+          | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result","none"))' 2>/dev/null)
+        echo "opa_put: ${RESULT} opa_window_start_hour: ${OPA_VAL}"
+      register: r_final_put
+      changed_when: false
+      ignore_errors: true
+
+    # -------------------------------------------------------------------------
     # Final state: ensure maintenance label is associated with Demo JT (validate task-7)
-    # Label was disassociated in prose-09; re-associated in prose-10 above.
-    # Confirm it's still there; if not, associate again.
     # -------------------------------------------------------------------------
     - name: Read back Demo Job Template label list for final state
       ansible.builtin.uri:
@@ -990,6 +1060,7 @@
           extra_vars.rego in /var/lib/opa/policies:         {{ 'ok' if hostvars['_facts_relay']['bastion_extravars_ok'] | default(false) else 'NOT ok' }}
           maintenance_window.rego in /var/lib/opa/policies: {{ 'ok' if hostvars['_facts_relay']['bastion_maint_ok'] | default(false) else 'NOT ok' }}
           OPA server reachable on bastion:8181:              {{ 'ok' if hostvars['_facts_relay']['bastion_opa_reachable'] | default(false) else 'NOT ok' }}
+          exclusive rego pre-built (/tmp/maint_excl.rego):  {{ 'ok' if hostvars['_facts_relay']['bastion_excl_rego_ready'] | default(false) else 'NOT ok' }}
 
           [AAP policy enforcement tests]
           Demo Job Template found (id={{ jt_id | default('NOT FOUND') }}): {{ 'ok' if jt_id | default('') | length > 0 else 'NOT ok' }}
@@ -1000,9 +1071,13 @@
           prose-09 aap/maintenance blocks (no label):        {{ 'ok' if maint_no_label_blocks | default(false) else 'NOT ok' }}
           prose-10 aap/maintenance blocks (outside window):  {{ 'ok' if maint_outside_window_blocks | default(false) else 'NOT ok' }}
 
-          [OPA reload wait results]
-          prose-08 OPA reload wait: {{ r_wait_opa_incl.stdout | default('skipped') }}
-          prose-10 OPA reload wait: {{ r_wait_opa_excl.stdout | default('skipped') }}
+          [OPA patch debug]
+          prose-07 incl write (Play2): {{ r_write_incl_play2.stdout | default('skipped') | trim }}
+          prose-07 incl PUT (Play2):   {{ r_put_incl_play2.stdout | default('skipped') | trim }}
+          prose-07 excl write (Play2): {{ r_write_excl_play2.stdout | default('skipped') | trim }}
+          prose-08 incl PUT (local):   {{ r_put_incl.stdout | default('skipped') | trim }}
+          prose-10 excl PUT (local):   {{ r_put_excl.stdout | default('skipped') | trim }}
+          final PUT (local):           {{ r_final_put.stdout | default('skipped') | trim }}
 
           [Final Demo JT state]
           opa_query_path = aap/maintenance:                  {{ 'ok' if final_opa_query_path | default('') == 'aap/maintenance' else 'NOT ok — value: ' ~ (final_opa_query_path | default('NOT SET')) }}
