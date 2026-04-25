@@ -37,7 +37,6 @@
         return_content: true
       register: r_cloud_inv_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Check if Lab inventory already exists in AAP
       ansible.builtin.uri:
@@ -52,7 +51,6 @@
         return_content: true
       register: r_lab_inv_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set prereq needed flag
       ansible.builtin.set_fact:

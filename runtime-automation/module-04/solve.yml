@@ -57,7 +57,6 @@
         return_content: true
       register: r_wfjt_prereq
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Run add-workflow-template.yml on bastion if WFJT is missing
       ansible.builtin.shell: |
@@ -95,7 +94,6 @@
         return_content: true
       register: r_wfjt
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set WFJT ID and existence facts
       ansible.builtin.set_fact:
@@ -147,7 +145,6 @@
         return_content: true
       register: r_survey_post
       ignore_errors: true
-      delegate_to: localhost
       when: wfjt_id | default('') | length > 0
 
     # -------------------------------------------------------------------------
@@ -169,7 +166,6 @@
         return_content: true
       register: r_survey_enable
       ignore_errors: true
-      delegate_to: localhost
       when: wfjt_id | default('') | length > 0
 
     - name: Set survey enabled fact
@@ -207,7 +203,6 @@
         return_content: true
       register: r_launch_admin
       ignore_errors: true
-      delegate_to: localhost
       when: wfjt_id | default('') | length > 0
 
     - name: Set admin launch facts
@@ -240,7 +235,6 @@
       until: >
         r_admin_job_status.json.status | default('') in
         ['successful', 'failed', 'error', 'canceled']
-      delegate_to: localhost
       when:
         - _admin_launch_ok | default(false) | bool
         - _admin_job_id | default('') | length > 0
@@ -303,7 +297,6 @@
         return_content: true
       register: r_role_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Create custom role "WorkflowNightShifter"
       ansible.builtin.uri:
@@ -327,7 +320,6 @@
         return_content: true
       register: r_role_create
       ignore_errors: true
-      delegate_to: localhost
       when: >
         r_role_check.json is not defined
         or r_role_check.json.count | default(0) | int == 0
@@ -345,7 +337,6 @@
         return_content: true
       register: r_role_lookup
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set role ID and existence facts
       ansible.builtin.set_fact:
@@ -377,7 +368,6 @@
         return_content: true
       register: r_user_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Create user "nightshift"
       ansible.builtin.uri:
@@ -401,7 +391,6 @@
         return_content: true
       register: r_user_create
       ignore_errors: true
-      delegate_to: localhost
       when: >
         r_user_check.json is not defined
         or r_user_check.json.count | default(0) | int == 0
@@ -419,7 +408,6 @@
         return_content: true
       register: r_user_lookup
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set nightshift user ID and existence facts
       ansible.builtin.set_fact:
@@ -451,7 +439,6 @@
         return_content: true
       register: r_org_lookup
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set Default org ID fact
       ansible.builtin.set_fact:
@@ -478,7 +465,6 @@
         return_content: true
       register: r_team_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Create team "NightShifters" in org Default
       ansible.builtin.uri:
@@ -498,7 +484,6 @@
         return_content: true
       register: r_team_create
       ignore_errors: true
-      delegate_to: localhost
       when: >
         default_org_id | default('') | length > 0
         and (r_team_check.json is not defined
@@ -517,7 +502,6 @@
         return_content: true
       register: r_team_lookup
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set team ID and existence facts
       ansible.builtin.set_fact:
@@ -551,7 +535,6 @@
         return_content: true
       register: r_team_member_check
       ignore_errors: true
-      delegate_to: localhost
       when:
         - nightshift_team_id | default('') | length > 0
         - nightshift_user_id | default('') | length > 0
@@ -568,7 +551,6 @@
       register: r_team_add_user
       ignore_errors: true
       changed_when: true
-      delegate_to: localhost
       when:
         - nightshift_team_id | default('') | length > 0
         - nightshift_user_id | default('') | length > 0
@@ -589,7 +571,6 @@
         return_content: true
       register: r_team_member_verify
       ignore_errors: true
-      delegate_to: localhost
       when: nightshift_team_id | default('') | length > 0
 
     - name: Set team membership fact
@@ -628,7 +609,6 @@
         return_content: true
       register: r_assignment_check
       ignore_errors: true
-      delegate_to: localhost
       when:
         - nightshift_team_id | default('') | length > 0
         - nightshift_role_id | default('') | length > 0
@@ -646,7 +626,6 @@
       register: r_assignment_create
       ignore_errors: true
       changed_when: true
-      delegate_to: localhost
       when:
         - nightshift_team_id | default('') | length > 0
         - nightshift_role_id | default('') | length > 0
@@ -669,7 +648,6 @@
         return_content: true
       register: r_assignment_verify
       ignore_errors: true
-      delegate_to: localhost
       when:
         - nightshift_team_id | default('') | length > 0
         - nightshift_role_id | default('') | length > 0
@@ -706,7 +684,6 @@
         return_content: true
       register: r_nightshift_wfjts
       ignore_errors: true
-      delegate_to: localhost
       when:
         - _user_ok | default(false) | bool
         - _role_assignment_ok | default(false) | bool
@@ -749,7 +726,6 @@
         return_content: true
       register: r_launch_night
       ignore_errors: true
-      delegate_to: localhost
       when:
         - wfjt_id | default('') | length > 0
         - _nightshift_sees_1_wfjt | default(false) | bool
@@ -786,7 +762,6 @@
       until: >
         r_night_job_status.json.status | default('') in
         ['successful', 'failed', 'error', 'canceled']
-      delegate_to: localhost
       when:
         - _night_launch_ok | default(false) | bool
         - _night_job_id | default('') | length > 0

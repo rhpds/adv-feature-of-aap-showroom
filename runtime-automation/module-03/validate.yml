@@ -46,7 +46,6 @@
         return_content: true
       register: r_wfjt
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set WFJT ID and count facts
       ansible.builtin.set_fact:
@@ -76,7 +75,6 @@
         return_content: true
       register: r_nodes
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | string | length > 0
 
     # -------------------------------------------------------
@@ -119,7 +117,6 @@
         return_content: true
       register: r_success_nodes
       ignore_errors: true
-      delegate_to: localhost
       when: _node_infra_id | string | length > 0
 
     # -------------------------------------------------------
@@ -138,7 +135,6 @@
         return_content: true
       register: r_jobs
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | string | length > 0
 
     # -------------------------------------------------------

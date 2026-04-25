@@ -702,7 +702,6 @@
       register: r_ansiblesign_verify
       changed_when: false
       ignore_errors: true
-      delegate_to: bastion
 
     - name: Set ansible-sign installed fact from verify
       ansible.builtin.set_fact:
@@ -732,7 +731,6 @@
       register: r_sign_files_verify
       changed_when: false
       ignore_errors: true
-      delegate_to: bastion
 
     - name: Set sha256sum files exist facts from verify
       ansible.builtin.set_fact:
@@ -747,7 +745,6 @@
       register: r_git_pushed_verify
       changed_when: false
       ignore_errors: true
-      delegate_to: bastion
 
     - name: Set signed commit pushed fact
       ansible.builtin.set_fact:
@@ -761,7 +758,6 @@
       register: r_tamper_pushed_verify
       changed_when: false
       ignore_errors: true
-      delegate_to: bastion
 
     - name: Set tamper commit pushed fact
       ansible.builtin.set_fact:

@@ -28,7 +28,6 @@
     _ctrl_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
-    _node1: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') | regex_replace('^bastion\\.', 'node1.') }}"
     _api: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}/api/controller/v2"
 
   tasks:
@@ -49,7 +48,6 @@
         return_content: true
       register: r_jt_infra
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Get Web App Deploy job template ID
       ansible.builtin.uri:
@@ -64,7 +62,6 @@
         return_content: true
       register: r_jt_app
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set job template ID facts
       ansible.builtin.set_fact:
@@ -92,7 +89,6 @@
         return_content: true
       register: r_wfjt_check
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set existing WFJT ID when found
       ansible.builtin.set_fact:
@@ -124,7 +120,6 @@
         return_content: true
       register: r_wfjt_create
       ignore_errors: true
-      delegate_to: localhost
       when: _existing_wfjt_id | length == 0
 
     - name: Set WFJT ID from newly created template
@@ -164,7 +159,6 @@
         return_content: true
       register: r_existing_nodes
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     - name: Set existing nodes count fact
@@ -201,7 +195,6 @@
         return_content: true
       register: r_node_infra
       ignore_errors: true
-      delegate_to: localhost
       when:
         - _wfjt_id | length > 0
         - _jt_infra_id | length > 0
@@ -224,7 +217,6 @@
         return_content: true
       register: r_node_app
       ignore_errors: true
-      delegate_to: localhost
       when:
         - _wfjt_id | length > 0
         - _jt_app_id | length > 0
@@ -292,7 +284,6 @@
         return_content: true
       register: r_success_check
       ignore_errors: true
-      delegate_to: localhost
       when: _node_infra_id | string | length > 0
 
     - name: Set success link exists fact
@@ -321,7 +312,6 @@
       changed_when: (r_link.stdout_lines | last | default('0')) | int == 204
       failed_when: (r_link.stdout_lines | last | default('0')) | int not in [204, 400]
       ignore_errors: true
-      delegate_to: localhost
       when:
         - _node_infra_id | string | length > 0
         - _node_app_id | string | length > 0
@@ -356,7 +346,6 @@
         return_content: true
       register: r_launch
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     - name: Set workflow job ID fact
@@ -388,7 +377,6 @@
         return_content: true
       register: r_job_status
       ignore_errors: true
-      delegate_to: localhost
       until: r_job_status.json.status | default('') in ['successful', 'failed', 'error', 'canceled']
       retries: 30
       delay: 10

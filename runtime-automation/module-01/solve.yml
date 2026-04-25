@@ -25,7 +25,6 @@
   gather_facts: false
   vars:
     # Required for connection: local inside runner container where ~lab-user does not exist
-    ansible_remote_tmp: /tmp/.ansible/tmp
     # Derive controller URL — extravar > CONTROLLER_URL env > guid-based default
     _env_controller_url: "{{ lookup('env', 'CONTROLLER_URL') }}"
     _default_controller_url: "https://controller-{{ guid | default('') }}.apps.ocpvdev01.rhdp.net"

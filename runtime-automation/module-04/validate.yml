@@ -56,7 +56,6 @@
         return_content: true
       register: r_wfjt
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set WFJT ID fact
       ansible.builtin.set_fact:
@@ -83,7 +82,6 @@
         return_content: true
       register: r_role_lookup
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set role ID fact
       ansible.builtin.set_fact:
@@ -108,7 +106,6 @@
         return_content: true
       register: r_team_lookup
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Set team ID fact
       ansible.builtin.set_fact:
@@ -136,7 +133,6 @@
         return_content: true
       register: r_survey_spec
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     - name: Fetch WFJT detail to confirm survey_enabled flag
@@ -152,7 +148,6 @@
         return_content: true
       register: r_wfjt_detail
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     # -------------------------------------------------------
@@ -174,7 +169,6 @@
         return_content: true
       register: r_jobs
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     # -------------------------------------------------------
@@ -204,7 +198,6 @@
         return_content: true
       register: r_role_detail
       ignore_errors: true
-      delegate_to: localhost
 
     # -------------------------------------------------------
     # Check 5 — User "nightshift" exists as a Normal user
@@ -222,7 +215,6 @@
         return_content: true
       register: r_user_detail
       ignore_errors: true
-      delegate_to: localhost
 
     # -------------------------------------------------------
     # Check 6 — Team "NightShifters" exists AND nightshift is a member
@@ -240,7 +232,6 @@
         return_content: true
       register: r_team_detail
       ignore_errors: true
-      delegate_to: localhost
 
     - name: Fetch "nightshift" membership in "NightShifters" team
       ansible.builtin.uri:
@@ -255,7 +246,6 @@
         return_content: true
       register: r_team_member
       ignore_errors: true
-      delegate_to: localhost
       when: _team_id | length > 0
 
     # -------------------------------------------------------
@@ -275,7 +265,6 @@
         return_content: true
       register: r_assignment
       ignore_errors: true
-      delegate_to: localhost
       when:
         - _team_id | length > 0
         - _role_id | length > 0
@@ -297,7 +286,6 @@
         return_content: true
       register: r_nightshift_wfjts
       ignore_errors: true
-      delegate_to: localhost
 
     # -------------------------------------------------------
     # Check 9 — PATCH WFJT as nightshift must return 403 (no edit permission)
@@ -320,7 +308,6 @@
         return_content: true
       register: r_patch_403
       ignore_errors: true
-      delegate_to: localhost
       when: _wfjt_id | length > 0
 
     # -------------------------------------------------------
