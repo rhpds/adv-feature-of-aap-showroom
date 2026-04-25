@@ -4,23 +4,25 @@
 # What this playbook automates:
 #   prose-01: SKIP — OAuth app pre-created by provisioner; validated via API check
 #   prose-02: Create AAP team "aap-admins" in org Default (api)
-#   prose-03: SSAP OAuth login — Node.js Playwright (OAuth authorization_code flow)
-#   prose-04: SSAP RBAC wizard — Node.js Playwright (create ssap_operators role)
+#   prose-03: SSAP OAuth login — Playwright via podman (zt-runner image has node+playwright)
+#   prose-04: SSAP RBAC wizard — Playwright via podman
 #   prose-05a: PATCH "Demo Job Template" description = "Say hello to the world" (api)
-#   prose-05b: SSAP Sync now — Node.js Playwright
+#   prose-05b: SSAP Sync now — Playwright via podman
 #   prose-06: SKIP — exploratory job run
-#   prose-07: Import custom SSAP template from Gitea URL — Backstage catalog API (admin)
+#   prose-07: Import custom SSAP template — Playwright via podman (Backstage catalog API)
 #   prose-08: SKIP — exploratory custom template launch
 #
+# Playwright strategy:
+#   node is not installed on bastion. JS scripts are written to /tmp/ (bastion writable)
+#   and executed via: podman run --rm --network=host -v /tmp:/tmp zt-runner node /tmp/script.js
+#   Variables are passed as container env vars to avoid Jinja2-in-JS escaping issues.
+#
 # Variable resolution: ALL env lookups use lookup('ansible.builtin.env', 'VAR_NAME').
-# No bare extravars. No guid-derived URLs.
-# API base: /api/controller/v2/ (AAP 2.5 unified gateway)
 
 - name: Module 08 — Self-Service Automation Portal Solve
   hosts: bastions
   gather_facts: false
   vars:
-    # All variables resolved exclusively from environment variables
     _controller_url:      "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _controller_username: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _controller_password: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
@@ -28,21 +30,18 @@
     _gitea_username:      "{{ lookup('ansible.builtin.env', 'GITEA_USERNAME') }}"
     _gitea_password:      "{{ lookup('ansible.builtin.env', 'GITEA_PASSWORD') }}"
     _ssap_url:            "{{ lookup('ansible.builtin.env', 'SSAP_URL') }}"
-    # AAP 2.5 uses /api/controller/v2/ (not /api/v2/)
     _aap_api:             "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/$', '') }}/api/controller/v2"
-    # Custom template Gitea raw URL
     _template_url:        "{{ lookup('ansible.builtin.env', 'GITEA_URL') }}/{{ lookup('ansible.builtin.env', 'GITEA_USERNAME') }}/ssap-customtemplates/raw/branch/main/rhel_dynamic.yml"
+    _runner_image:        "quay.io/rhpds/zt-runner:v2.4.2"
 
   tasks:
 
     # -------------------------------------------------------------------------
-    # Guard: ensure required env vars are set
+    # Guard
     # -------------------------------------------------------------------------
     - name: Verify required environment variables are set
       ansible.builtin.fail:
-        msg: >-
-          Required env var '{{ item.name }}' is empty.
-          Set it before running the solve playbook.
+        msg: "Required env var '{{ item.name }}' is empty."
       loop:
         - { name: CONTROLLER_URL,      val: "{{ _controller_url }}" }
         - { name: CONTROLLER_USERNAME, val: "{{ _controller_username }}" }
@@ -53,21 +52,8 @@
       when: item.val | length == 0
 
     # -------------------------------------------------------------------------
-    # Evidence directory for Playwright screenshots
+    # prose-01: SKIP — OAuth app pre-created by provisioner; validate via API
     # -------------------------------------------------------------------------
-    - name: Create evidence directory
-      ansible.builtin.file:
-        path: /tmp/evidence
-        state: directory
-        mode: "0755"
-      ignore_errors: true
-
-    # =========================================================================
-    # prose-01: SKIP — OAuth app pre-created by provisioner
-    # Verify it exists via API and set fact for reporting only.
-    # =========================================================================
-    # SKIP (create): OAuth app is provisioner-created; we only validate it exists.
-
     - name: Query AAP OAuth applications named Selfservice-*
       ansible.builtin.uri:
         url: "{{ _aap_api }}/applications/?name__startswith=Selfservice"
@@ -87,18 +73,14 @@
           {{
             r_oauth_apps.status | default(0) == 200
             and (r_oauth_apps.json.count | default(0) | int) > 0
-            and (
-              r_oauth_apps.json.results | default([])
-              | selectattr('authorization_grant_type', 'equalto', 'authorization-code')
-              | list | length
-            ) > 0
+            and (r_oauth_apps.json.results | default([])
+                  | selectattr('authorization_grant_type', 'equalto', 'authorization-code')
+                  | list | length) > 0
           }}
 
-    # =========================================================================
+    # -------------------------------------------------------------------------
     # prose-02: Create AAP team "aap-admins" in org Default
-    # Idempotent: query first, create only if absent.
-    # =========================================================================
-
+    # -------------------------------------------------------------------------
     - name: Query Default org ID
       ansible.builtin.uri:
         url: "{{ _aap_api }}/organizations/?name=Default"
@@ -158,151 +140,163 @@
             or (r_team_create.status | default(0) in [200, 201])
           }}
 
-    # =========================================================================
-    # prose-03: SSAP OAuth login (authorization_code flow)
-    # Sign in to SSAP as lab-user via AAP OAuth.
-    # Uses URL-wait pattern to properly handle the OAuth redirect.
-    # =========================================================================
-
-    - name: "prose-03: SSAP OAuth sign-in via Node.js Playwright"
-      ansible.builtin.shell: |
-        node - <<'NODEJS'
-        const { chromium } = require('playwright');
-        (async () => {
-          const browser = await chromium.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
-          });
-          const context = await browser.newContext({ ignoreHTTPSErrors: true });
-          const page = await context.newPage();
-          try {
-            await page.goto('{{ _ssap_url }}/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
-            const signInBtn = page.getByRole('button', { name: /sign in/i });
-            if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-              // Wait for redirect to AAP controller
-              const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
-              await signInBtn.click();
-              await navPromise;
-              // Wait for login form
-              await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
-              await page.fill('#pf-login-username-id', '{{ _controller_username }}');
-              await page.fill('#pf-login-password-id', '{{ _controller_password }}');
-              const nav2 = page.waitForNavigation({ timeout: 30000 });
-              await page.click('button[type="submit"]');
-              await nav2;
-              // Handle Authorize page
-              const authorizeBtn = page.getByRole('button', { name: /authorize/i });
-              if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                const nav3 = page.waitForNavigation({ timeout: 30000 });
-                await authorizeBtn.click();
-                await nav3.catch(() => {});
+    # -------------------------------------------------------------------------
+    # prose-03: SSAP OAuth sign-in via Playwright (podman)
+    # -------------------------------------------------------------------------
+    - name: Write prose-03 Playwright script to /tmp
+      ansible.builtin.copy:
+        dest: /tmp/pw_m08_signin.js
+        mode: "0755"
+        content: |
+          const { chromium } = require('playwright');
+          const SSAP_URL  = process.env.SSAP_URL;
+          const CTRL_USER = process.env.CTRL_USER;
+          const CTRL_PASS = process.env.CTRL_PASS;
+          const EVIDENCE  = process.env.EVIDENCE_DIR || '/tmp/evidence';
+          (async () => {
+            const browser = await chromium.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
+            });
+            const context = await browser.newContext({ ignoreHTTPSErrors: true });
+            const page = await context.newPage();
+            try {
+              await page.goto(SSAP_URL + '/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
+              const signInBtn = page.getByRole('button', { name: /sign in/i });
+              if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
+                await signInBtn.click();
+                await navPromise;
+                await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
+                await page.fill('#pf-login-username-id', CTRL_USER);
+                await page.fill('#pf-login-password-id', CTRL_PASS);
+                const nav2 = page.waitForNavigation({ timeout: 30000 });
+                await page.click('button[type="submit"]');
+                await nav2;
+                const authorizeBtn = page.getByRole('button', { name: /authorize/i });
+                if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                  const nav3 = page.waitForNavigation({ timeout: 30000 });
+                  await authorizeBtn.click();
+                  await nav3.catch(() => {});
+                }
+                await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
               }
-              await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+              await page.screenshot({ path: EVIDENCE + '/step-03-ssap-signin.png', fullPage: false });
+              console.log('prose-03: SSAP sign-in completed. URL:', page.url());
+            } catch (e) {
+              await page.screenshot({ path: EVIDENCE + '/step-03-ssap-signin-error.png', fullPage: false }).catch(() => {});
+              console.error('prose-03 error (non-fatal):', e.message);
+            } finally {
+              await browser.close();
             }
-            await page.screenshot({ path: '/tmp/evidence/step-03-ssap-signin.png', fullPage: false });
-            console.log('prose-03: SSAP sign-in completed. URL:', page.url());
-          } catch (e) {
-            await page.screenshot({ path: '/tmp/evidence/step-03-ssap-signin-error.png', fullPage: false }).catch(() => {});
-            console.error('prose-03 error (non-fatal):', e.message);
-          } finally {
-            await browser.close();
-          }
-        })();
-        NODEJS
-      environment:
-        PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+          })();
+
+    - name: "prose-03: SSAP OAuth sign-in via Playwright (podman)"
+      ansible.builtin.shell: |
+        podman run --rm \
+          --network=host \
+          -v /tmp:/tmp \
+          -e SSAP_URL="{{ _ssap_url }}" \
+          -e CTRL_USER="{{ _controller_username }}" \
+          -e CTRL_PASS="{{ _controller_password }}" \
+          -e EVIDENCE_DIR=/tmp/evidence \
+          -e PLAYWRIGHT_BROWSERS_PATH=/app/.playwright \
+          {{ _runner_image }} \
+          node /tmp/pw_m08_signin.js
       register: r_pw_signin
       ignore_errors: true
 
-    # =========================================================================
-    # prose-04: SSAP RBAC wizard — create ssap_operators role
-    # Navigate SSAP /rbac page, click Create, fill role name.
-    # =========================================================================
-
-    - name: "prose-04: Create ssap_operators RBAC role in SSAP via Node.js Playwright"
-      ansible.builtin.shell: |
-        node - <<'NODEJS'
-        const { chromium } = require('playwright');
-        (async () => {
-          const browser = await chromium.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
-          });
-          const context = await browser.newContext({ ignoreHTTPSErrors: true });
-          const page = await context.newPage();
-          try {
-            // Authenticate first
-            await page.goto('{{ _ssap_url }}/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
-            const signInBtn = page.getByRole('button', { name: /sign in/i });
-            if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-              const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
-              await signInBtn.click();
-              await navPromise;
-              await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
-              await page.fill('#pf-login-username-id', '{{ _controller_username }}');
-              await page.fill('#pf-login-password-id', '{{ _controller_password }}');
-              const nav2 = page.waitForNavigation({ timeout: 30000 });
-              await page.click('button[type="submit"]');
-              await nav2;
-              const authorizeBtn = page.getByRole('button', { name: /authorize/i });
-              if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                const nav3 = page.waitForNavigation({ timeout: 30000 });
-                await authorizeBtn.click();
-                await nav3.catch(() => {});
+    # -------------------------------------------------------------------------
+    # prose-04: SSAP RBAC wizard — create ssap_operators role (podman)
+    # -------------------------------------------------------------------------
+    - name: Write prose-04 Playwright script to /tmp
+      ansible.builtin.copy:
+        dest: /tmp/pw_m08_rbac.js
+        mode: "0755"
+        content: |
+          const { chromium } = require('playwright');
+          const SSAP_URL  = process.env.SSAP_URL;
+          const CTRL_USER = process.env.CTRL_USER;
+          const CTRL_PASS = process.env.CTRL_PASS;
+          const EVIDENCE  = process.env.EVIDENCE_DIR || '/tmp/evidence';
+          (async () => {
+            const browser = await chromium.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
+            });
+            const context = await browser.newContext({ ignoreHTTPSErrors: true });
+            const page = await context.newPage();
+            try {
+              await page.goto(SSAP_URL + '/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
+              const signInBtn = page.getByRole('button', { name: /sign in/i });
+              if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
+                await signInBtn.click();
+                await navPromise;
+                await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
+                await page.fill('#pf-login-username-id', CTRL_USER);
+                await page.fill('#pf-login-password-id', CTRL_PASS);
+                const nav2 = page.waitForNavigation({ timeout: 30000 });
+                await page.click('button[type="submit"]');
+                await nav2;
+                const authorizeBtn = page.getByRole('button', { name: /authorize/i });
+                if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                  const nav3 = page.waitForNavigation({ timeout: 30000 });
+                  await authorizeBtn.click();
+                  await nav3.catch(() => {});
+                }
+                await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
               }
-              await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
-            }
-
-            // Navigate to RBAC page
-            await page.goto('{{ _ssap_url }}/rbac', { waitUntil: 'networkidle', timeout: 30000 });
-            console.log('RBAC URL:', page.url());
-            await page.screenshot({ path: '/tmp/evidence/step-04-ssap-rbac.png', fullPage: false });
-
-            // Check if ssap_operators role already exists
-            const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-            if (bodyText.includes('ssap_operators')) {
-              console.log('prose-04: ssap_operators role already exists — skipping');
-              process.exit(0);
-            }
-
-            // Click Create button
-            const createBtn = page.getByRole('button', { name: /create/i });
-            if (await createBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-              await createBtn.click();
-              await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-              await page.screenshot({ path: '/tmp/evidence/step-04-ssap-rbac-create.png', fullPage: false });
-
-              // Fill role name
-              const nameInput = page.locator("input[name='name'], input[placeholder*='role' i], input[placeholder*='name' i]");
-              if (await nameInput.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-                await nameInput.first().fill('ssap_operators');
+              await page.goto(SSAP_URL + '/rbac', { waitUntil: 'networkidle', timeout: 30000 });
+              await page.screenshot({ path: EVIDENCE + '/step-04-ssap-rbac.png', fullPage: false });
+              const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+              if (bodyText.includes('ssap_operators')) {
+                console.log('prose-04: ssap_operators role already exists — skipping');
+                process.exit(0);
               }
-              const saveBtn = page.getByRole('button', { name: /save|create|next|add/i });
-              if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                await saveBtn.click();
+              const createBtn = page.getByRole('button', { name: /create/i });
+              if (await createBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                await createBtn.click();
                 await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+                await page.screenshot({ path: EVIDENCE + '/step-04-ssap-rbac-create.png', fullPage: false });
+                const nameInput = page.locator("input[name='name'], input[placeholder*='role' i], input[placeholder*='name' i]");
+                if (await nameInput.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+                  await nameInput.first().fill('ssap_operators');
+                }
+                const saveBtn = page.getByRole('button', { name: /save|create|next|add/i });
+                if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                  await saveBtn.click();
+                  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+                }
               }
+              await page.screenshot({ path: EVIDENCE + '/step-04-ssap-rbac-done.png', fullPage: false });
+              console.log('prose-04: SSAP RBAC role step completed');
+            } catch (e) {
+              await page.screenshot({ path: EVIDENCE + '/step-04-ssap-rbac-error.png', fullPage: false }).catch(() => {});
+              console.error('prose-04 error (non-fatal):', e.message);
+            } finally {
+              await browser.close();
             }
-            await page.screenshot({ path: '/tmp/evidence/step-04-ssap-rbac-done.png', fullPage: false });
-            console.log('prose-04: SSAP RBAC role step completed');
-          } catch (e) {
-            await page.screenshot({ path: '/tmp/evidence/step-04-ssap-rbac-error.png', fullPage: false }).catch(() => {});
-            console.error('prose-04 error (non-fatal):', e.message);
-          } finally {
-            await browser.close();
-          }
-        })();
-        NODEJS
-      environment:
-        PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+          })();
+
+    - name: "prose-04: Create ssap_operators RBAC role via Playwright (podman)"
+      ansible.builtin.shell: |
+        podman run --rm \
+          --network=host \
+          -v /tmp:/tmp \
+          -e SSAP_URL="{{ _ssap_url }}" \
+          -e CTRL_USER="{{ _controller_username }}" \
+          -e CTRL_PASS="{{ _controller_password }}" \
+          -e EVIDENCE_DIR=/tmp/evidence \
+          -e PLAYWRIGHT_BROWSERS_PATH=/app/.playwright \
+          {{ _runner_image }} \
+          node /tmp/pw_m08_rbac.js
       register: r_pw_rbac
       ignore_errors: true
 
-    # =========================================================================
-    # prose-05a: PATCH "Demo Job Template" description in AAP
-    # Idempotent: skip PATCH if description already correct.
-    # =========================================================================
-
+    # -------------------------------------------------------------------------
+    # prose-05a: PATCH Demo Job Template description
+    # -------------------------------------------------------------------------
     - name: Query Demo Job Template ID from AAP
       ansible.builtin.uri:
         url: "{{ _aap_api }}/job_templates/?name=Demo+Job+Template"
@@ -357,193 +351,194 @@
 
     - name: Set Demo JT description ok fact
       ansible.builtin.set_fact:
-        _demo_jt_desc_ok: >-
-          {{
-            (r_jt_verify.json.description | default('')) == 'Say hello to the world'
-          }}
+        _demo_jt_desc_ok: "{{ (r_jt_verify.json.description | default('')) == 'Say hello to the world' }}"
       when: _demo_jt_id | default('') | length > 0
 
-    # =========================================================================
-    # prose-05b: SSAP Sync now
-    # Click the "Sync now" button in SSAP to pull latest AAP template state.
-    # =========================================================================
-
-    - name: "prose-05b: SSAP Sync now via Node.js Playwright"
-      ansible.builtin.shell: |
-        node - <<'NODEJS'
-        const { chromium } = require('playwright');
-        (async () => {
-          const browser = await chromium.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
-          });
-          const context = await browser.newContext({ ignoreHTTPSErrors: true });
-          const page = await context.newPage();
-          try {
-            // Authenticate
-            await page.goto('{{ _ssap_url }}/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
-            const signInBtn = page.getByRole('button', { name: /sign in/i });
-            if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-              const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
-              await signInBtn.click();
-              await navPromise;
-              await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
-              await page.fill('#pf-login-username-id', '{{ _controller_username }}');
-              await page.fill('#pf-login-password-id', '{{ _controller_password }}');
-              const nav2 = page.waitForNavigation({ timeout: 30000 });
-              await page.click('button[type="submit"]');
-              await nav2;
-              const authorizeBtn = page.getByRole('button', { name: /authorize/i });
-              if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                const nav3 = page.waitForNavigation({ timeout: 30000 });
-                await authorizeBtn.click();
-                await nav3.catch(() => {});
+    # -------------------------------------------------------------------------
+    # prose-05b: SSAP Sync now via Playwright (podman)
+    # -------------------------------------------------------------------------
+    - name: Write prose-05b Playwright script to /tmp
+      ansible.builtin.copy:
+        dest: /tmp/pw_m08_sync.js
+        mode: "0755"
+        content: |
+          const { chromium } = require('playwright');
+          const SSAP_URL  = process.env.SSAP_URL;
+          const CTRL_USER = process.env.CTRL_USER;
+          const CTRL_PASS = process.env.CTRL_PASS;
+          const EVIDENCE  = process.env.EVIDENCE_DIR || '/tmp/evidence';
+          (async () => {
+            const browser = await chromium.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
+            });
+            const context = await browser.newContext({ ignoreHTTPSErrors: true });
+            const page = await context.newPage();
+            try {
+              await page.goto(SSAP_URL + '/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
+              const signInBtn = page.getByRole('button', { name: /sign in/i });
+              if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
+                await signInBtn.click();
+                await navPromise;
+                await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
+                await page.fill('#pf-login-username-id', CTRL_USER);
+                await page.fill('#pf-login-password-id', CTRL_PASS);
+                const nav2 = page.waitForNavigation({ timeout: 30000 });
+                await page.click('button[type="submit"]');
+                await nav2;
+                const authorizeBtn = page.getByRole('button', { name: /authorize/i });
+                if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                  const nav3 = page.waitForNavigation({ timeout: 30000 });
+                  await authorizeBtn.click();
+                  await nav3.catch(() => {});
+                }
+                await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
               }
-              await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+              const syncBtn = page.getByRole('button', { name: /sync now|synchronize|refresh/i });
+              if (await syncBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                await syncBtn.click();
+                await page.waitForTimeout(5000);
+              }
+              await page.screenshot({ path: EVIDENCE + '/step-05b-ssap-sync.png', fullPage: false });
+              console.log('prose-05b: SSAP Sync now step completed');
+            } catch (e) {
+              await page.screenshot({ path: EVIDENCE + '/step-05b-ssap-sync-error.png', fullPage: false }).catch(() => {});
+              console.error('prose-05b error (non-fatal):', e.message);
+            } finally {
+              await browser.close();
             }
-            const syncBtn = page.getByRole('button', { name: /sync now|synchronize|refresh/i });
-            if (await syncBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-              await syncBtn.click();
-              await page.waitForTimeout(5000);
-            }
-            await page.screenshot({ path: '/tmp/evidence/step-05b-ssap-sync.png', fullPage: false });
-            console.log('prose-05b: SSAP Sync now step completed');
-          } catch (e) {
-            await page.screenshot({ path: '/tmp/evidence/step-05b-ssap-sync-error.png', fullPage: false }).catch(() => {});
-            console.error('prose-05b error (non-fatal):', e.message);
-          } finally {
-            await browser.close();
-          }
-        })();
-        NODEJS
-      environment:
-        PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+          })();
+
+    - name: "prose-05b: SSAP Sync now via Playwright (podman)"
+      ansible.builtin.shell: |
+        podman run --rm \
+          --network=host \
+          -v /tmp:/tmp \
+          -e SSAP_URL="{{ _ssap_url }}" \
+          -e CTRL_USER="{{ _controller_username }}" \
+          -e CTRL_PASS="{{ _controller_password }}" \
+          -e EVIDENCE_DIR=/tmp/evidence \
+          -e PLAYWRIGHT_BROWSERS_PATH=/app/.playwright \
+          {{ _runner_image }} \
+          node /tmp/pw_m08_sync.js
       register: r_pw_sync
       ignore_errors: true
 
-    # =========================================================================
-    # prose-06: SKIP — exploratory job run
-    # =========================================================================
-    # SKIP: prose-06 — Run Demo Job Template inside SSAP (exploratory; no automation)
-
-    # =========================================================================
-    # prose-07: Import custom SSAP template from Gitea URL
-    #
-    # Uses the Backstage catalog locations API with admin credentials.
-    # Logs in as admin via SSAP OAuth, intercepts the Backstage Bearer token,
-    # then POSTs the Gitea template URL to /api/catalog/locations.
-    # Idempotent: checks if template already present before importing.
-    # =========================================================================
-
-    - name: "prose-07: Import custom SSAP template from Gitea via Backstage catalog API"
-      ansible.builtin.shell: |
-        node - <<'NODEJS'
-        const { chromium } = require('playwright');
-        (async () => {
-          const browser = await chromium.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
-          });
-          const context = await browser.newContext({ ignoreHTTPSErrors: true });
-          const page = await context.newPage();
-
-          let backstageToken = null;
-          page.on('request', req => {
-            const auth = req.headers()['authorization'];
-            if (auth && auth.startsWith('Bearer ')) {
-              backstageToken = auth.replace('Bearer ', '');
-            }
-          });
-
-          try {
-            // Authenticate as admin (has permission to POST catalog locations)
-            await page.goto('{{ _ssap_url }}/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
-            const signInBtn = page.getByRole('button', { name: /sign in/i });
-            if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-              const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
-              await signInBtn.click();
-              await navPromise;
-              await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
-              // Use AAP admin credentials for Backstage catalog write access
-              await page.fill('#pf-login-username-id', 'admin');
-              await page.fill('#pf-login-password-id', 'ansible123!');
-              const nav2 = page.waitForNavigation({ timeout: 30000 });
-              await page.click('button[type="submit"]');
-              await nav2;
-              const authorizeBtn = page.getByRole('button', { name: /authorize/i });
-              if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                const nav3 = page.waitForNavigation({ timeout: 30000 });
-                await authorizeBtn.click();
-                await nav3.catch(() => {});
+    # -------------------------------------------------------------------------
+    # prose-07: Import custom SSAP template via Backstage catalog API (podman)
+    # -------------------------------------------------------------------------
+    - name: Write prose-07 Playwright script to /tmp
+      ansible.builtin.copy:
+        dest: /tmp/pw_m08_import.js
+        mode: "0755"
+        content: |
+          const { chromium } = require('playwright');
+          const SSAP_URL    = process.env.SSAP_URL;
+          const TEMPLATE_URL = process.env.TEMPLATE_URL;
+          const EVIDENCE    = process.env.EVIDENCE_DIR || '/tmp/evidence';
+          (async () => {
+            const browser = await chromium.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
+            });
+            const context = await browser.newContext({ ignoreHTTPSErrors: true });
+            const page = await context.newPage();
+            let backstageToken = null;
+            page.on('request', req => {
+              const auth = req.headers()['authorization'];
+              if (auth && auth.startsWith('Bearer ')) {
+                backstageToken = auth.replace('Bearer ', '');
               }
-              await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
-            }
-            // Wait for API calls to fire (to capture token)
-            await page.waitForTimeout(3000);
-
-            await page.screenshot({ path: '/tmp/evidence/step-07-01-catalog-before.png', fullPage: false });
-
-            // Check if template already present
-            const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-            if (bodyText.includes('Manage RHEL Time Servers')) {
-              console.log('prose-07: template already present — skipping import');
-              await page.screenshot({ path: '/tmp/evidence/step-07-04-template-visible.png', fullPage: false });
-              process.exit(0);
-            }
-
-            if (!backstageToken) {
-              console.error('prose-07: no Backstage token captured');
+            });
+            try {
+              // Use admin credentials for Backstage catalog write access
+              await page.goto(SSAP_URL + '/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
+              const signInBtn = page.getByRole('button', { name: /sign in/i });
+              if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
+                await signInBtn.click();
+                await navPromise;
+                await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
+                await page.fill('#pf-login-username-id', process.env.ADMIN_USER || 'admin');
+                await page.fill('#pf-login-password-id', process.env.ADMIN_PASS || 'ansible123!');
+                const nav2 = page.waitForNavigation({ timeout: 30000 });
+                await page.click('button[type="submit"]');
+                await nav2;
+                const authorizeBtn = page.getByRole('button', { name: /authorize/i });
+                if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                  const nav3 = page.waitForNavigation({ timeout: 30000 });
+                  await authorizeBtn.click();
+                  await nav3.catch(() => {});
+                }
+                await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+              }
+              await page.waitForTimeout(3000);
+              await page.screenshot({ path: EVIDENCE + '/step-07-01-catalog-before.png', fullPage: false });
+              const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+              if (bodyText.includes('Manage RHEL Time Servers')) {
+                console.log('prose-07: template already present — skipping import');
+                await page.screenshot({ path: EVIDENCE + '/step-07-04-template-visible.png', fullPage: false });
+                process.exit(0);
+              }
+              if (!backstageToken) {
+                console.error('prose-07: no Backstage token captured — cannot POST catalog location');
+                process.exit(1);
+              }
+              const postResp = await page.evaluate(async (args) => {
+                const resp = await fetch('/api/catalog/locations', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + args.token
+                  },
+                  body: JSON.stringify({ type: 'url', target: args.url })
+                });
+                const text = await resp.text();
+                return { status: resp.status, body: text.substring(0, 500) };
+              }, { url: TEMPLATE_URL, token: backstageToken });
+              console.log('Catalog POST status:', postResp.status);
+              if (postResp.status !== 200 && postResp.status !== 201) {
+                console.error('prose-07: catalog POST failed:', postResp.body);
+                process.exit(1);
+              }
+              let found = false;
+              for (let i = 0; i < 9; i++) {
+                await page.waitForTimeout(10000);
+                await page.reload({ waitUntil: 'networkidle', timeout: 30000 }).catch(() => {});
+                const text = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+                if (text.includes('Manage RHEL Time Servers')) { found = true; break; }
+              }
+              await page.screenshot({ path: EVIDENCE + '/step-07-04-template-visible.png', fullPage: false });
+              if (found) {
+                console.log('prose-07: Manage RHEL Time Servers template visible in catalog');
+                process.exit(0);
+              } else {
+                console.error('prose-07: template not found after import');
+                process.exit(1);
+              }
+            } catch (e) {
+              await page.screenshot({ path: EVIDENCE + '/step-07-error.png', fullPage: false }).catch(() => {});
+              console.error('prose-07 error:', e.message);
               process.exit(1);
+            } finally {
+              await browser.close();
             }
+          })();
 
-            // POST catalog location
-            const templateUrl = '{{ _template_url }}';
-            const postResp = await page.evaluate(async (args) => {
-              const resp = await fetch('/api/catalog/locations', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': 'Bearer ' + args.token
-                },
-                body: JSON.stringify({ type: 'url', target: args.url })
-              });
-              const text = await resp.text();
-              return { status: resp.status, body: text.substring(0, 500) };
-            }, { url: templateUrl, token: backstageToken });
-
-            console.log('Catalog POST status:', postResp.status);
-            if (postResp.status !== 200 && postResp.status !== 201) {
-              console.error('prose-07: catalog POST failed:', postResp.body);
-              process.exit(1);
-            }
-
-            // Wait for catalog to refresh and template to appear
-            let found = false;
-            for (let i = 0; i < 9; i++) {
-              await page.waitForTimeout(10000);
-              await page.reload({ waitUntil: 'networkidle', timeout: 30000 }).catch(() => {});
-              const text = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-              if (text.includes('Manage RHEL Time Servers')) { found = true; break; }
-            }
-            await page.screenshot({ path: '/tmp/evidence/step-07-04-template-visible.png', fullPage: false });
-            if (found) {
-              console.log('prose-07: Manage RHEL Time Servers template visible in catalog');
-              process.exit(0);
-            } else {
-              console.error('prose-07: template not found after import');
-              process.exit(1);
-            }
-          } catch (e) {
-            await page.screenshot({ path: '/tmp/evidence/step-07-error.png', fullPage: false }).catch(() => {});
-            console.error('prose-07 error:', e.message);
-            process.exit(1);
-          } finally {
-            await browser.close();
-          }
-        })();
-        NODEJS
-      environment:
-        PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+    - name: "prose-07: Import custom SSAP template via Playwright (podman)"
+      ansible.builtin.shell: |
+        podman run --rm \
+          --network=host \
+          -v /tmp:/tmp \
+          -e SSAP_URL="{{ _ssap_url }}" \
+          -e TEMPLATE_URL="{{ _template_url }}" \
+          -e ADMIN_USER="admin" \
+          -e ADMIN_PASS="{{ lookup('ansible.builtin.env', 'CONTROLLER_ADMIN_PASSWORD') | default('ansible123!') }}" \
+          -e EVIDENCE_DIR=/tmp/evidence \
+          -e PLAYWRIGHT_BROWSERS_PATH=/app/.playwright \
+          {{ _runner_image }} \
+          node /tmp/pw_m08_import.js
       register: r_pw_import
       ignore_errors: true
 
@@ -556,15 +551,9 @@
             and r_pw_import.rc | default(1) == 0
           }}
 
-    # =========================================================================
-    # prose-08: SKIP — exploratory custom template launch
-    # =========================================================================
-    # SKIP: prose-08 — Launch custom dynamic template (exploratory; no automation)
-
-    # =========================================================================
-    # Baseline: verify SSAP URL returns HTTP 200
-    # =========================================================================
-
+    # -------------------------------------------------------------------------
+    # Baseline: verify SSAP URL is reachable
+    # -------------------------------------------------------------------------
     - name: Check SSAP portal is reachable (HTTP 200/302)
       ansible.builtin.uri:
         url: "{{ _ssap_url }}"
@@ -580,10 +569,9 @@
       ansible.builtin.set_fact:
         _ssap_reachable: "{{ r_ssap_reachable.status | default(0) in [200, 302] }}"
 
-    # =========================================================================
+    # -------------------------------------------------------------------------
     # Final report
-    # =========================================================================
-
+    # -------------------------------------------------------------------------
     - name: Report solve status
       ansible.builtin.debug:
         msg: |
@@ -592,11 +580,10 @@
           SSAP portal reachable (HTTP 200/302):                     {{ 'ok' if _ssap_reachable | default(false) else 'NOT ok' }}
           Demo Job Template description "Say hello to the world":   {{ 'ok' if _demo_jt_desc_ok | default(false) else 'NOT ok' }}
           Custom template "Manage RHEL Time Servers" in catalog:    {{ 'ok' if _custom_template_ok | default(false) else 'NOT ok — check /tmp/evidence/ screenshots' }}
+          Playwright signin rc:   {{ r_pw_signin.rc | default('skipped') }}
+          Playwright rbac rc:     {{ r_pw_rbac.rc | default('skipped') }}
+          Playwright sync rc:     {{ r_pw_sync.rc | default('skipped') }}
+          Playwright import rc:   {{ r_pw_import.rc | default('skipped') }}
 
-          SKIPPED (exploratory / no stable API):
-            prose-01: OAuth app creation (provisioner-created; existence validated above)
-            prose-06: Run Demo Job Template in SSAP (exploratory)
-            prose-08: Launch custom dynamic template (exploratory)
-
-          Evidence screenshots saved to: /tmp/evidence/
-          Template URL registered: {{ _template_url }}
+          Evidence screenshots saved to: /tmp/evidence/ (on bastion)
+          Template URL: {{ _template_url }}
