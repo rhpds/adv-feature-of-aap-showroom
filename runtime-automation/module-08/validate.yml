@@ -231,6 +231,9 @@
         NODEJS
       environment:
         PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
       register: r_pw_catalog
       ignore_errors: true
 

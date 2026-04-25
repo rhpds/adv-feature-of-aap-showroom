@@ -211,6 +211,9 @@
         NODEJS
       environment:
         PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
       register: r_pw_signin
       ignore_errors: true
 
@@ -295,6 +298,9 @@
         NODEJS
       environment:
         PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
       register: r_pw_rbac
       ignore_errors: true
 
@@ -418,6 +424,9 @@
         NODEJS
       environment:
         PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
       register: r_pw_sync
       ignore_errors: true
 
@@ -544,6 +553,9 @@
         NODEJS
       environment:
         PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
       register: r_pw_import
       ignore_errors: true
 
