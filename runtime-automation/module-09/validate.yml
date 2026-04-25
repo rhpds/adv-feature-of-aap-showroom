@@ -121,13 +121,13 @@
     # -------------------------------------------------------
     - name: Pull bastion check results into localhost
       ansible.builtin.set_fact:
-        _task1_ok: "{{ task1_ok | default(false) | bool }}"
-        _task2_ok: "{{ task2_ok | default(false) | bool }}"
-        _task3_ok: "{{ task3_ok | default(false) | bool }}"
-        _task4_ok: "{{ task4_ok | default(false) | bool }}"
-        _task5_ok: "{{ task5_ok | default(false) | bool }}"
-        _window_start_hour: "{{ window_start_hour | default('?') }}"
-        _opa_http_code: "{{ opa_http_code | default('000') }}"
+        _task1_ok: "{{ bastion_task1_ok | default(false) | bool }}"
+        _task2_ok: "{{ bastion_task2_ok | default(false) | bool }}"
+        _task3_ok: "{{ bastion_task3_ok | default(false) | bool }}"
+        _task4_ok: "{{ bastion_task4_ok | default(false) | bool }}"
+        _task5_ok: "{{ bastion_task5_ok | default(false) | bool }}"
+        _window_start_hour: "{{ bastion_window_start_hour | default('?') }}"
+        _opa_http_code: "{{ bastion_opa_http_code | default('000') }}"
 
     # -------------------------------------------------------
     # Task 6 — Demo Job Template has opa_query_path set (non-empty)

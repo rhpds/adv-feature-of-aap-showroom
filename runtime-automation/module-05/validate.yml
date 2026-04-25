@@ -138,9 +138,9 @@
     # Pull bastion facts via hostvars
     - name: Pull bastion check results into localhost
       ansible.builtin.set_fact:
-        _task1_ok: "{{ task1_ok | default(false) | bool }}"
-        _task2_ok: "{{ task2_ok | default(false) | bool }}"
-        _task3_ok: "{{ task3_ok | default(false) | bool }}"
+        _task1_ok: "{{ bastion_task1_ok | default(false) | bool }}"
+        _task2_ok: "{{ bastion_task2_ok | default(false) | bool }}"
+        _task3_ok: "{{ bastion_task3_ok | default(false) | bool }}"
 
     # -------------------------------------------------------
     # Check 4 — "Cloud inventory" exists in AAP org Default
