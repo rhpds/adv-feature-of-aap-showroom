@@ -172,74 +172,65 @@
     # Uses Node.js Playwright with proper OAuth flow to authenticate
     # and verify the template is visible in the catalog.
     # -------------------------------------------------------
-    - name: Write SSAP catalog check Playwright script to /tmp
-      ansible.builtin.copy:
-        dest: /tmp/pw_m08_validate_catalog.js
-        mode: "0755"
-        content: |
-          const { chromium } = require('playwright');
-          const SSAP_URL  = process.env.SSAP_URL;
-          const CTRL_USER = process.env.CTRL_USER;
-          const CTRL_PASS = process.env.CTRL_PASS;
-          (async () => {
-            const browser = await chromium.launch({
-              headless: true,
-              args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
-            });
-            const context = await browser.newContext({ ignoreHTTPSErrors: true });
-            const page = await context.newPage();
-            try {
-              await page.goto(SSAP_URL + '/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
-              const signInBtn = page.getByRole('button', { name: /sign in/i });
-              if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
-                await signInBtn.click();
-                await navPromise;
-                await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
-                await page.fill('#pf-login-username-id', CTRL_USER);
-                await page.fill('#pf-login-password-id', CTRL_PASS);
-                const nav2 = page.waitForNavigation({ timeout: 30000 });
-                await page.click('button[type="submit"]');
-                await nav2;
-                const authorizeBtn = page.getByRole('button', { name: /authorize/i });
-                if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                  const nav3 = page.waitForNavigation({ timeout: 30000 });
-                  await authorizeBtn.click();
-                  await nav3.catch(() => {});
-                }
-                await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
-              }
-              await page.waitForTimeout(3000);
-              const bodyText = await page.locator('body').innerText({ timeout: 10000 }).catch(() => '');
-              await page.screenshot({ path: '/tmp/playwright-evidence-module08-catalog.png', fullPage: false });
-              if (bodyText.includes('Manage RHEL Time Servers')) {
-                console.log('CATALOG_CHECK: PASS - Manage RHEL Time Servers found');
-                process.exit(0);
-              } else {
-                console.error('CATALOG_CHECK: FAIL - Manage RHEL Time Servers not found');
-                console.error('Body preview:', bodyText.substring(0, 300));
-                process.exit(1);
-              }
-            } catch (e) {
-              await page.screenshot({ path: '/tmp/playwright-evidence-module08-catalog-error.png', fullPage: false }).catch(() => {});
-              console.error('Playwright error:', e.message);
-              process.exit(1);
-            } finally {
-              await browser.close();
-            }
-          })();
-
-    - name: "Playwright — check SSAP catalog for Manage RHEL Time Servers (podman)"
+    - name: "Playwright — check SSAP catalog for Manage RHEL Time Servers template"
       ansible.builtin.shell: |
-        podman run --rm \
-          --network=host \
-          -v /tmp:/tmp \
-          -e SSAP_URL="{{ _ssap_url }}" \
-          -e CTRL_USER="{{ _controller_username }}" \
-          -e CTRL_PASS="{{ _controller_password }}" \
-          -e PLAYWRIGHT_BROWSERS_PATH=/app/.playwright \
-          quay.io/rhpds/zt-runner:v2.4.2 \
-          node /tmp/pw_m08_validate_catalog.js
+        node - <<'NODEJS'
+        const { chromium } = require('playwright');
+        (async () => {
+          const browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
+          });
+          const context = await browser.newContext({ ignoreHTTPSErrors: true });
+          const page = await context.newPage();
+          try {
+            await page.goto('{{ _ssap_url }}/self-service/catalog', { waitUntil: 'networkidle', timeout: 30000 });
+
+            // Handle sign-in if visible (full OAuth flow with URL-wait pattern)
+            const signInBtn = page.getByRole('button', { name: /sign in/i });
+            if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+              const navPromise = page.waitForURL('**/controller-*/**', { timeout: 20000 });
+              await signInBtn.click();
+              await navPromise;
+              await page.waitForSelector('#pf-login-username-id', { timeout: 15000 });
+              await page.fill('#pf-login-username-id', '{{ _controller_username }}');
+              await page.fill('#pf-login-password-id', '{{ _controller_password }}');
+              const nav2 = page.waitForNavigation({ timeout: 30000 });
+              await page.click('button[type="submit"]');
+              await nav2;
+              const authorizeBtn = page.getByRole('button', { name: /authorize/i });
+              if (await authorizeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                const nav3 = page.waitForNavigation({ timeout: 30000 });
+                await authorizeBtn.click();
+                await nav3.catch(() => {});
+              }
+              await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+            }
+
+            // Wait for catalog page to fully render
+            await page.waitForTimeout(3000);
+            const bodyText = await page.locator('body').innerText({ timeout: 10000 }).catch(() => '');
+            await page.screenshot({ path: '/tmp/playwright-evidence-module08-catalog.png', fullPage: false });
+
+            if (bodyText.includes('Manage RHEL Time Servers')) {
+              console.log('CATALOG_CHECK: PASS - Manage RHEL Time Servers found');
+              process.exit(0);
+            } else {
+              console.error('CATALOG_CHECK: FAIL - Manage RHEL Time Servers not found');
+              console.error('Body preview:', bodyText.substring(0, 300));
+              process.exit(1);
+            }
+          } catch (e) {
+            await page.screenshot({ path: '/tmp/playwright-evidence-module08-catalog-error.png', fullPage: false }).catch(() => {});
+            console.error('Playwright error:', e.message);
+            process.exit(1);
+          } finally {
+            await browser.close();
+          }
+        })();
+        NODEJS
+      environment:
+        PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
       register: r_pw_catalog
       ignore_errors: true
 
