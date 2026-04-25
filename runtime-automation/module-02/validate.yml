@@ -16,36 +16,8 @@
 # -------------------------------------------------------------------------
 # Play 1 — Build dynamic bastion inventory from environment variables
 # -------------------------------------------------------------------------
-- name: Build bastion inventory
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
-    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22') }}"
-    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
-    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
-
-  tasks:
-
-    - name: Add bastion to in-memory inventory
-      ansible.builtin.add_host:
-        name: bastion
-        groups: bastion
-        ansible_host: "{{ _ssh_host }}"
-        ansible_port: "{{ _ssh_port | int }}"
-        ansible_user: "{{ _ssh_user }}"
-        ansible_password: "{{ _ssh_pass }}"
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: _ssh_host | length > 0
-
-# -------------------------------------------------------------------------
-# Play 2 — Check bastion-side state
-# -------------------------------------------------------------------------
 - name: Module 02 Validate — Check bastion state
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     home_dir: "/home/{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
@@ -88,17 +60,13 @@
 # Play 3 — REST API checks (localhost)
 # -------------------------------------------------------------------------
 - name: Module 02 Validate — REST API checks
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     _ctrl_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
     _api_base: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}/api/controller/v2"
-    _b: "{{ hostvars['bastion'] | default({}) }}"
 
   tasks:
 
@@ -218,12 +186,12 @@
 
     - name: Validate ansible-navigator.yml with CONTROLLER_HOST
       validation_check:
-        check: "{{ _b._val_task1_ok | default(false) | bool }}"
+        check: "{{ _val_task1_ok | default(false) | bool }}"
         pass_msg: "Task 1: ~/.ansible-navigator.yml exists and contains CONTROLLER_HOST"
         error_msg: "Task 1: FAILED — ~/.ansible-navigator.yml missing or does not contain CONTROLLER_HOST"
 
     - name: Validate configure-controller.yml present
       validation_check:
-        check: "{{ _b._val_task2_ok | default(false) | bool }}"
+        check: "{{ _val_task2_ok | default(false) | bool }}"
         pass_msg: "Task 2: ~/playbooks-adv-controller/configure-controller.yml found"
         error_msg: "Task 2: FAILED — ~/playbooks-adv-controller/configure-controller.yml not found — clone the repo first"

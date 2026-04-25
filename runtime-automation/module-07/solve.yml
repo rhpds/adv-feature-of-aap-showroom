@@ -38,34 +38,8 @@
 # ---------------------------------------------------------------------------
 # Play 1 — Register bastion in the in-memory inventory
 # ---------------------------------------------------------------------------
-- name: Module 07 Solve — build bastion inventory
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
-    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
-    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
-    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
-  tasks:
-    - name: Add bastion to in-memory inventory
-      ansible.builtin.add_host:
-        name: bastion
-        groups: bastion
-        ansible_host: "{{ _ssh_host }}"
-        ansible_port: "{{ _ssh_port }}"
-        ansible_user: "{{ _ssh_user }}"
-        ansible_password: "{{ _ssh_pass }}"
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: _ssh_host | length > 0
-
-# ---------------------------------------------------------------------------
-# Play 2 — GPG setup, ansible-sign, sign and push to Gitea
-# ---------------------------------------------------------------------------
 - name: Module 07 Solve — GPG, ansible-sign, signed commit on bastion
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     _user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
@@ -291,12 +265,9 @@
 #           MUST complete before the tamper is pushed (Play 4)
 # ---------------------------------------------------------------------------
 - name: Module 07 Solve — configure AAP credentials and project, wait for initial sync
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
     _gitea_url: "{{ lookup('ansible.builtin.env', 'GITEA_URL') | regex_replace('/+$', '') }}"
@@ -313,11 +284,11 @@
     # -------------------------------------------------------------------------
     - name: Set GPG public key fact from bastion hostvars
       ansible.builtin.set_fact:
-        _gpg_pub_key: "{{ hostvars['bastion']['r_signing_asc_content']['stdout'] }}"
+        _gpg_pub_key: "{{ r_signing_asc_content['stdout'] }}"
       when:
-        - hostvars['bastion']['r_signing_asc_content'] is defined
-        - hostvars['bastion']['r_signing_asc_content']['stdout'] is defined
-        - hostvars['bastion']['r_signing_asc_content']['stdout'] | length > 0
+        - r_signing_asc_content is defined
+        - r_signing_asc_content['stdout'] is defined
+        - r_signing_asc_content['stdout'] | length > 0
 
     # -------------------------------------------------------------------------
     # Step 11: Create AAP GPG credential "ansible-sign-cred" (idempotent)
@@ -579,7 +550,7 @@
 # Play 4 — Tamper with apache_install.yml and push (AFTER initial sync ok)
 # ---------------------------------------------------------------------------
 - name: Module 07 Solve — tamper apache_install.yml on bastion and push
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     _user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
@@ -635,12 +606,9 @@
 # Play 5 — Trigger tamper re-sync, verify failure, final report
 # ---------------------------------------------------------------------------
 - name: Module 07 Solve — trigger tamper sync, verify checks, report
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
@@ -706,26 +674,26 @@
       ansible.builtin.set_fact:
         _gpg_key_ok: >-
           {{
-            hostvars['bastion']['r_gpg_key_check'] is defined
-            and (hostvars['bastion']['r_gpg_key_check']['stdout'] | default('') | trim) == 'exists'
+            r_gpg_key_check is defined
+            and (r_gpg_key_check['stdout'] | default('') | trim) == 'exists'
           }}
 
     - name: Set signing_demo.asc valid fact from bastion hostvars
       ansible.builtin.set_fact:
         _asc_ok: >-
           {{
-            hostvars['bastion']['r_signing_asc_content'] is defined
-            and (hostvars['bastion']['r_signing_asc_content']['stdout'] | default('')) | length > 0
-            and 'BEGIN PGP PUBLIC KEY BLOCK' in (hostvars['bastion']['r_signing_asc_content']['stdout'] | default(''))
+            r_signing_asc_content is defined
+            and (r_signing_asc_content['stdout'] | default('')) | length > 0
+            and 'BEGIN PGP PUBLIC KEY BLOCK' in (r_signing_asc_content['stdout'] | default(''))
           }}
 
     - name: Set ansible-sign installed fact from bastion hostvars
       ansible.builtin.set_fact:
         _ansiblesign_ok: >-
           {{
-            hostvars['bastion']['r_sign'] is defined
-            or (hostvars['bastion']['r_manifest'] is defined
-                and hostvars['bastion']['r_manifest']['stat']['exists'] | default(false))
+            r_sign is defined
+            or (r_manifest is defined
+                and r_manifest['stat']['exists'] | default(false))
           }}
 
     - name: Verify ansible-sign installed on bastion
@@ -744,16 +712,16 @@
       ansible.builtin.set_fact:
         _manifest_ok: >-
           {{
-            hostvars['bastion']['r_manifest'] is defined
-            and hostvars['bastion']['r_manifest']['stat']['exists'] | default(false)
+            r_manifest is defined
+            and r_manifest['stat']['exists'] | default(false)
           }}
 
     - name: Set sha256sum.txt exists fact from bastion hostvars
       ansible.builtin.set_fact:
         _sha256_ok: >-
           {{
-            hostvars['bastion']['r_sha256_verify'] is defined
-            and hostvars['bastion']['r_sha256_verify']['stat']['exists'] | default(false)
+            r_sha256_verify is defined
+            and r_sha256_verify['stat']['exists'] | default(false)
           }}
 
     - name: Verify .ansible-sign files exist on bastion

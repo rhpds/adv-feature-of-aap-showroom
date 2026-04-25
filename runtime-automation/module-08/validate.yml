@@ -17,12 +17,9 @@
 # OAuth apps API: /api/gateway/v1/ (AAP 2.5 — OAuth apps are at gateway level)
 
 - name: Module 08 Validation — Self-Service Automation Portal
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     student_user:         "{{ user | default('') }}"
     _controller_url:      "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _controller_username: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"

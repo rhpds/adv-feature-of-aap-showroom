@@ -21,36 +21,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Play 1 — Build bastion in-memory inventory from env lookups
 # ─────────────────────────────────────────────────────────────────────────────
-- name: Module 05 Solve — build bastion inventory
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
-    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
-    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user', true) }}"
-    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
-
-  tasks:
-    - name: Add bastion to in-memory inventory
-      ansible.builtin.add_host:
-        name: bastion
-        groups: bastion
-        ansible_host: "{{ _ssh_host }}"
-        ansible_port: "{{ _ssh_port | int }}"
-        ansible_user: "{{ _ssh_user }}"
-        ansible_password: "{{ _ssh_pass }}"
-        ansible_ssh_private_key_file: "/app/.ssh/id_rsa"
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: _ssh_host | length > 0
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Play 2 — Write dyninv.sh to bastion and smoke-test it
-# ─────────────────────────────────────────────────────────────────────────────
 - name: Module 05 Solve — write dyninv.sh to bastion
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user', true) }}"
@@ -102,12 +74,9 @@
 # All uri tasks run on localhost (runner container reaches controller HTTPS).
 # ─────────────────────────────────────────────────────────────────────────────
 - name: Module 05 Solve — configure AAP Cloud inventory
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     # ── env lookups ────────────────────────────────────────────────────────────
     _controller_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/+$', '') }}"
     _controller_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"

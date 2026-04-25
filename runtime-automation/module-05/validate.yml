@@ -17,36 +17,8 @@
 # =============================================================================
 # Play 1 — Build bastion in-memory inventory
 # =============================================================================
-- name: Module 05 Validate — build bastion inventory
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
-    student_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
-    bastion_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
-    bastion_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default(22) }}"
-    bastion_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
-    bastion_password: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
-  tasks:
-
-    - name: Add bastion to in-memory inventory
-      ansible.builtin.add_host:
-        name: bastion
-        groups: bastion
-        ansible_host: "{{ bastion_host }}"
-        ansible_port: "{{ bastion_port }}"
-        ansible_user: "{{ bastion_user }}"
-        ansible_password: "{{ bastion_password }}"
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: bastion_host | length > 0
-
-# =============================================================================
-# Play 2 — Bastion checks (Tasks 1, 2, 3)
-# =============================================================================
 - name: Module 05 Validate — bastion checks
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     bastion_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
@@ -151,12 +123,9 @@
 # Play 3 — AAP REST checks (Tasks 4–7) and final validation_check
 # =============================================================================
 - name: Module 05 Validate — AAP checks and final result
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     student_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user') }}"
     controller_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     controller_username: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
@@ -169,9 +138,9 @@
     # Pull bastion facts via hostvars
     - name: Pull bastion check results into localhost
       ansible.builtin.set_fact:
-        _task1_ok: "{{ hostvars['bastion']['bastion_task1_ok'] | default(false) | bool }}"
-        _task2_ok: "{{ hostvars['bastion']['bastion_task2_ok'] | default(false) | bool }}"
-        _task3_ok: "{{ hostvars['bastion']['bastion_task3_ok'] | default(false) | bool }}"
+        _task1_ok: "{{ task1_ok | default(false) | bool }}"
+        _task2_ok: "{{ task2_ok | default(false) | bool }}"
+        _task3_ok: "{{ task3_ok | default(false) | bool }}"
 
     # -------------------------------------------------------
     # Check 4 — "Cloud inventory" exists in AAP org Default

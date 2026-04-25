@@ -45,34 +45,8 @@
 # =============================================================================
 # Play 1 — Build dynamic bastion inventory from environment variables
 # =============================================================================
-- name: Build bastion inventory
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
-    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
-    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') | default('lab-user', true) }}"
-    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
-  tasks:
-    - name: Add bastion to in-memory inventory
-      ansible.builtin.add_host:
-        name: bastion
-        groups: bastion
-        ansible_host: "{{ _ssh_host }}"
-        ansible_port: "{{ _ssh_port }}"
-        ansible_user: "{{ _ssh_user }}"
-        ansible_password: "{{ _ssh_pass }}"
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-      when: _ssh_host | length > 0
-
-# =============================================================================
-# Play 2 — Bastion: clone OPA policies, copy to policy dir, build rego variants
-# =============================================================================
 - name: Module 09 — Bastion file operations
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     _gitea_url: "{{ lookup('ansible.builtin.env', 'GITEA_URL') }}"
@@ -291,28 +265,13 @@
     # -------------------------------------------------------------------------
     # Share facts to Play 3 via dummy host
     # -------------------------------------------------------------------------
-    - name: Persist bastion facts to dummy host for Play 3
-      ansible.builtin.add_host:
-        name: _facts_relay
-        groups: facts_relay
-        bastion_deny_ok: "{{ deny_ok }}"
-        bastion_extravars_ok: "{{ extravars_ok }}"
-        bastion_maint_ok: "{{ maint_ok }}"
-        bastion_opa_reachable: "{{ opa_reachable }}"
-        bastion_maint_window_incl_patched: "{{ maint_window_incl_patched }}"
-        bastion_current_hour: "{{ current_hour }}"
-        bastion_excl_rego_ready: "{{ excl_rego_ready }}"
-
 # =============================================================================
 # Play 3 — Localhost: all AAP REST API calls
 # =============================================================================
 - name: Module 09 — AAP REST API policy enforcement steps
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     _controller_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') | regex_replace('/$', '') }}"
     _controller_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _controller_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
@@ -1060,11 +1019,11 @@
           === Module 09 Solve — Policy Enforcement (OPA) ===
 
           [Bastion — policy files]
-          deny.rego in /var/lib/opa/policies:               {{ 'ok' if hostvars['_facts_relay']['bastion_deny_ok'] | default(false) else 'NOT ok' }}
-          extra_vars.rego in /var/lib/opa/policies:         {{ 'ok' if hostvars['_facts_relay']['bastion_extravars_ok'] | default(false) else 'NOT ok' }}
-          maintenance_window.rego in /var/lib/opa/policies: {{ 'ok' if hostvars['_facts_relay']['bastion_maint_ok'] | default(false) else 'NOT ok' }}
-          OPA server reachable on bastion:8181:              {{ 'ok' if hostvars['_facts_relay']['bastion_opa_reachable'] | default(false) else 'NOT ok' }}
-          exclusive rego pre-built (/tmp/maint_excl.rego):  {{ 'ok' if hostvars['_facts_relay']['bastion_excl_rego_ready'] | default(false) else 'NOT ok' }}
+          deny.rego in /var/lib/opa/policies:               {{ 'ok' if deny_ok | default(false) else 'NOT ok' }}
+          extra_vars.rego in /var/lib/opa/policies:         {{ 'ok' if extravars_ok | default(false) else 'NOT ok' }}
+          maintenance_window.rego in /var/lib/opa/policies: {{ 'ok' if maint_ok | default(false) else 'NOT ok' }}
+          OPA server reachable on bastion:8181:              {{ 'ok' if opa_reachable | default(false) else 'NOT ok' }}
+          exclusive rego pre-built (/tmp/maint_excl.rego):  {{ 'ok' if excl_rego_ready | default(false) else 'NOT ok' }}
 
           [AAP policy enforcement tests]
           Demo Job Template found (id={{ jt_id | default('NOT FOUND') }}): {{ 'ok' if jt_id | default('') | length > 0 else 'NOT ok' }}

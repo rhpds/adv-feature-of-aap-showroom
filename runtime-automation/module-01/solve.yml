@@ -21,12 +21,9 @@
 #   controller_password — extravar > CONTROLLER_PASSWORD env > bastion_password
 
 - name: Module 01 — Introduction to Unified UI Solve
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     # Required for connection: local inside runner container where ~lab-user does not exist
     ansible_remote_tmp: /tmp/.ansible/tmp
     # Derive controller URL — extravar > CONTROLLER_URL env > guid-based default

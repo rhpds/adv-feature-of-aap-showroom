@@ -164,7 +164,6 @@
     _ctrl_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
     _ctrl_pass: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
     _api_base: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}/api/controller/v2"
-    _b: "{{ hostvars['bastion'] | default({}) }}"
 
   tasks:
 
@@ -317,11 +316,11 @@
     - name: Report solve status
       ansible.builtin.debug:
         msg: |
-          ~/.ansible-navigator.yml exists:        {{ 'ok' if (_b._solve_nav_cfg_exists | default(false)) else 'NOT ok' }}
-          CONTROLLER_HOST in nav config:          {{ 'ok' if (_b._solve_nav_ctrl_host_ok | default(false)) else 'NOT ok' }}
-          repo cloned (playbooks-adv-controller): {{ 'ok' if (_b._solve_repo_cloned | default(false)) else 'NOT ok' }}
-          configure-controller.yml present:      {{ 'ok' if (_b._solve_playbook_exists | default(false)) else 'NOT ok' }}
-          ansible-navigator run exit 0:          {{ 'ok' if (_b._solve_navigator_ok | default(false)) else 'NOT ok (rc=' ~ (_b._solve_navigator_rc | default('N/A') | string) ~ ')' }}
+          ~/.ansible-navigator.yml exists:        {{ 'ok' if (_solve_nav_cfg_exists | default(false)) else 'NOT ok' }}
+          CONTROLLER_HOST in nav config:          {{ 'ok' if (_solve_nav_ctrl_host_ok | default(false)) else 'NOT ok' }}
+          repo cloned (playbooks-adv-controller): {{ 'ok' if (_solve_repo_cloned | default(false)) else 'NOT ok' }}
+          configure-controller.yml present:      {{ 'ok' if (_solve_playbook_exists | default(false)) else 'NOT ok' }}
+          ansible-navigator run exit 0:          {{ 'ok' if (_solve_navigator_ok | default(false)) else 'NOT ok (rc=' ~ (_solve_navigator_rc | default('N/A') | string) ~ ')' }}
           AAP inventory created:                 {{ 'ok' if _inventory_ok else 'NOT ok' }}
           AAP hosts added to inventory:          {{ 'ok' if _hosts_ok else 'NOT ok' }}
           AAP machine credentials created:       {{ 'ok' if _credentials_ok else 'NOT ok' }}

@@ -18,34 +18,8 @@
 # ---------------------------------------------------------------------------
 # Play 1: Register bastion in in-memory inventory
 # ---------------------------------------------------------------------------
-- name: Module 07 Validate — Register bastion host
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
-    _ssh_host: "{{ lookup('ansible.builtin.env', 'SSH_HOSTNAME') }}"
-    _ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) }}"
-    _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
-    _ssh_pass: "{{ lookup('ansible.builtin.env', 'SSH_PASSWORD') }}"
-  tasks:
-    - name: Add bastion to in-memory inventory
-      ansible.builtin.add_host:
-        name: bastion
-        groups: bastion
-        ansible_host: "{{ _ssh_host }}"
-        ansible_port: "{{ _ssh_port }}"
-        ansible_user: "{{ _ssh_user }}"
-        ansible_password: "{{ _ssh_pass }}"
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-        ansible_become: false
-
-# ---------------------------------------------------------------------------
-# Play 2: Filesystem and command checks on bastion
-# ---------------------------------------------------------------------------
 - name: Module 07 Validate — Bastion checks
-  hosts: bastion
+  hosts: bastions
   gather_facts: false
   vars:
     _ssh_user: "{{ lookup('ansible.builtin.env', 'SSH_USERNAME') }}"
@@ -140,12 +114,9 @@
 # Play 3: AAP REST API checks from localhost
 # ---------------------------------------------------------------------------
 - name: Module 07 Validate — AAP API checks
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     student_user: "{{ user | default('') }}"
     _controller_url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _controller_user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
@@ -159,13 +130,13 @@
     # -------------------------------------------------------
     - name: Pull bastion check facts into localhost play
       ansible.builtin.set_fact:
-        _projdir_ok: "{{ hostvars['bastion']['_projdir_ok'] | default(false) }}"
-        _gpg_key_ok: "{{ hostvars['bastion']['_gpg_key_ok'] | default(false) }}"
-        _asc_ok: "{{ hostvars['bastion']['_asc_ok'] | default(false) }}"
-        _ansiblesign_ok: "{{ hostvars['bastion']['_ansiblesign_ok'] | default(false) }}"
-        _manifest_ok: "{{ hostvars['bastion']['_manifest_ok'] | default(false) }}"
-        _sha256_ok: "{{ hostvars['bastion']['_sha256_ok'] | default(false) }}"
-        _sig_ok: "{{ hostvars['bastion']['_sig_ok'] | default(false) }}"
+        _projdir_ok: "{{ _projdir_ok | default(false) }}"
+        _gpg_key_ok: "{{ _gpg_key_ok | default(false) }}"
+        _asc_ok: "{{ _asc_ok | default(false) }}"
+        _ansiblesign_ok: "{{ _ansiblesign_ok | default(false) }}"
+        _manifest_ok: "{{ _manifest_ok | default(false) }}"
+        _sha256_ok: "{{ _sha256_ok | default(false) }}"
+        _sig_ok: "{{ _sig_ok | default(false) }}"
 
     # -------------------------------------------------------
     # Check 8 — ansible-sign-cred exists (GPG Public Key type)

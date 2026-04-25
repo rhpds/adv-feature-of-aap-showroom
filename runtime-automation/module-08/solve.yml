@@ -17,12 +17,9 @@
 # API base: /api/controller/v2/ (AAP 2.5 unified gateway)
 
 - name: Module 08 — Self-Service Automation Portal Solve
-  hosts: localhost
-  connection: local
+  hosts: bastions
   gather_facts: false
   vars:
-    ansible_connection: local
-    ansible_host: 127.0.0.1
     # All variables resolved exclusively from environment variables
     _controller_url:      "{{ lookup('ansible.builtin.env', 'CONTROLLER_URL') }}"
     _controller_username: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
