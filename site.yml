@@ -30,5 +30,11 @@ antora:
       enabled: false
     - require: ./content/lib/inject-buttons.js
 
+# We need the experimental attributes to render btn/menu/kbd as per
+# https://docs.antora.org/antora-ui-default/ui-macro-styles/
+asciidoc:
+  attributes:
+    experimental: true
+
 output:
   dir: ./www
